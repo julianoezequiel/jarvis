@@ -63,7 +63,11 @@ function ProjectCard({ group, onDelete }: { group: ProjectGroup; onDelete: () =>
             ⬇ ZIP
           </button>
           <button
-            onClick={e => { e.stopPropagation(); onDelete() }}
+            onClick={e => {
+              e.stopPropagation()
+              const confirmed = confirm(`Excluir projeto "${group.project_name}" e todos os ${group.files.length} arquivo${group.files.length !== 1 ? 's' : ''}? Esta ação não pode ser desfeita.`)
+              if (confirmed) onDelete()
+            }}
             title="Excluir projeto"
             style={{
               fontSize: 10, padding: '3px 8px', borderRadius: 4,
@@ -131,7 +135,11 @@ function LooseFileCard({ file, onDelete }: { file: MayaFile; onDelete: () => voi
           ⬇
         </button>
         <button
-          onClick={onDelete}
+          onClick={() => {
+            const name = file.path.includes('/') ? file.path.split('/').pop() : file.path
+            const confirmed = confirm(`Excluir arquivo "${name}"? Esta ação não pode ser desfeita.`)
+            if (confirmed) onDelete()
+          }}
           title="Excluir arquivo"
           style={{
             fontSize: 9, padding: '3px 8px', borderRadius: 4,
