@@ -55,6 +55,22 @@ export function useAgentOrchestrator() {
       const json = await res.json().catch(() => null)
       const text: string = json?.text || `Agente ${agent} concluiu sem resposta.`
       setAgentStatus(agent, { status: 'done', result: text, finishedAt: Date.now() })
+
+      // Injeta resultado no chat via evento global
+      try {
+        window.dispatchEvent(new CustomEvent('jarvis:agent-result', { detail: { agent, text } }))
+      } catch (_) {}
+
+      // Persiste em agent_knowledge (fire-and-forget)
+      fetch('/api/jarvis-memory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tool: 'save_agent_knowledge',
+          payload: { agent_id: agent, skill_name: task.slice(0, 80), content: text, quality: 7 },
+        }),
+      }).catch(() => {})
+
       return text
     } catch (err) {
       const errorMsg = String(err)

@@ -186,6 +186,24 @@ export async function POST(req: Request) {
         return new Response(JSON.stringify({ ok: true, data }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       }
 
+      case 'save_agent_knowledge': {
+        const { agent_id, skill_name, content: knowledgeContent, quality = 7 } = payload as {
+          agent_id?: string; skill_name?: string; content?: string; quality?: number
+        }
+        if (!agent_id || !knowledgeContent) {
+          return new Response(JSON.stringify({ error: 'missing agent_id or content' }), { status: 400 })
+        }
+        const { data, error } = await supabase.from('agent_knowledge').insert([{
+          agent_id,
+          skill_name: skill_name || 'general',
+          content: knowledgeContent,
+          quality,
+          created_at: new Date().toISOString(),
+        }])
+        if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 })
+        return new Response(JSON.stringify({ ok: true, data }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+
       case 'clear_memory': {
         const { scope = 'all', sessionId: clearSessionId } = payload as { scope?: 'all' | 'history' | 'facts'; sessionId?: string }
         let errors: string[] = []

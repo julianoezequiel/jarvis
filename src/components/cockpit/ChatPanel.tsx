@@ -172,6 +172,17 @@ export default function ChatPanel() {
                 onMouseLeave={() => setHoveredId(null)}
                 style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start' }}
               >
+                {m.role === 'system' ? (
+                  /* Resultado de agente — estilo compacto roxo */
+                  <div style={{
+                    borderRadius: '6px', padding: '5px 10px', fontSize: '12px', lineHeight: '1.4',
+                    background: 'rgba(109,40,217,0.15)', border: '1px solid rgba(167,139,250,0.25)',
+                    color: 'rgba(167,139,250,0.9)', maxWidth: '100%', wordBreak: 'break-word',
+                  }}>
+                    {m.text}
+                  </div>
+                ) : (
+                <>
                 <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: m.role === 'user' ? 'rgba(74,222,128,0.6)' : 'rgba(0,212,255,0.55)' }}>
                   {m.role === 'user' ? 'você' : 'maya'}
                 </span>
@@ -211,6 +222,8 @@ export default function ChatPanel() {
                     </button>
                   )}
                 </div>
+                </>
+                )}
               </div>
             ))}
             {isThinking && (

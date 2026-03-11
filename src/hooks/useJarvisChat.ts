@@ -220,6 +220,21 @@ export function useJarvisChat() {
     return () => window.removeEventListener('jarvis:clear-messages', handler)
   }, [])
 
+  // Ouvir resultados dos agentes e injetar como mensagens do sistema no chat
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { agent, text } = (e as CustomEvent<{ agent: string; text: string }>).detail || {}
+      if (!agent || !text) return
+      const preview = text.length > 120 ? text.slice(0, 120) + '…' : text
+      setMessages(prev => [
+        ...prev,
+        { id: `agent-${agent}-${Date.now()}`, role: 'system', text: `**${agent}:** ${preview}` },
+      ])
+    }
+    window.addEventListener('jarvis:agent-result', handler)
+    return () => window.removeEventListener('jarvis:agent-result', handler)
+  }, [])
+
   // Persist messages to localStorage so history is kept across reloads
   useEffect(() => {
     try {
