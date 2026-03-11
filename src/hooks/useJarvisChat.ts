@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, useEffect } from 'react'
+import { stripProtocols } from '../lib/agentRouter'
 
 export type ChatMessage = { id: string; role: 'user' | 'assistant' | 'system'; text: string }
 
@@ -367,13 +368,14 @@ export function useJarvisChat() {
           const { done, value } = await reader.read()
           if (done) break
           partial += decoder.decode(value, { stream: true })
+          const cleanPartial = stripProtocols(partial)
           setMessages((prev) => {
             const copy = [...prev]
             const last = copy[copy.length - 1]
             if (!last || last.role !== 'assistant') {
-              copy.push({ id: String(Date.now()), role: 'assistant', text: partial })
+              copy.push({ id: String(Date.now()), role: 'assistant', text: cleanPartial })
             } else {
-              last.text = partial
+              last.text = cleanPartial
             }
             return copy
           })
@@ -390,6 +392,10 @@ export function useJarvisChat() {
           ttsPromise = speakText(partial, () => setStatus('speaking (stream)'))
         }
         if (ttsPromise) await ttsPromise
+        // Emite o texto bruto (com blocos DELEGATE) para o orchestrator processar
+        if (partial) {
+          try { window.dispatchEvent(new CustomEvent('jarvis:assistant-message', { detail: { text: partial } })) } catch (_) {}
+        }
         setStatus('done')
         sendingRef.current = false
         return
@@ -399,21 +405,24 @@ export function useJarvisChat() {
       const json = await res.json().catch(() => null)
       if (json && json.text) {
         const assistantText = String(json.text)
+        const cleanText = stripProtocols(assistantText)
 
         // Se o servidor confirmou a limpeza de memória, zerar histórico local também
         if (json.provider === 'system' && /apaguei todo o hist/i.test(assistantText)) {
           try { window.localStorage.removeItem('jarvis_messages') } catch (_) {}
           try { window.localStorage.removeItem('jarvis_session_id') } catch (_) {}
-          setMessages([{ id: String(Date.now()), role: 'assistant', text: assistantText }])
+          setMessages([{ id: String(Date.now()), role: 'assistant', text: cleanText }])
           try { window.dispatchEvent(new CustomEvent('jarvis:clear-messages')) } catch (_) {}
         } else {
-          setMessages((m) => [...m, { id: String(Date.now()), role: 'assistant', text: assistantText }])
+          setMessages((m) => [...m, { id: String(Date.now()), role: 'assistant', text: cleanText }])
         }
 
         if (isLogEnabled()) console.log('[jarvis:log] assistant:', assistantText, { sessionId: effectiveSessionId || sessionId })
+        // Emite o texto bruto para o orchestrator detectar blocos DELEGATE
+        try { window.dispatchEvent(new CustomEvent('jarvis:assistant-message', { detail: { text: assistantText } })) } catch (_) {}
         // Stay in 'thinking' until audio actually starts playing
         setStatus('thinking')
-        await speakText(assistantText, () => setStatus(`speaking (${json.provider ?? 'ai'})`))
+        await speakText(cleanText, () => setStatus(`speaking (${json.provider ?? 'ai'})`))
         setStatus('done')
         sendingRef.current = false
         return

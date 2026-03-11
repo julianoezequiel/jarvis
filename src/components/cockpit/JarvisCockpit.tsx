@@ -10,12 +10,14 @@ import MicPermissionOverlay from './MicPermissionOverlay'
 import BootSequence from './BootSequence'
 import DeliveriesPanel from './DeliveriesPanel'
 import SpeechCaption from './SpeechCaption'
+import { useAgentOrchestrator } from '../../hooks/useAgentOrchestrator'
 
 type Phase = 'locked' | 'mic-prompt' | 'booting' | 'ready'
 
 export default function JarvisCockpit() {
   const [phase, setPhase] = useState<Phase>('locked')
   const [showSettings, setShowSettings] = useState(false)
+  const { agentStates } = useAgentOrchestrator()
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -52,7 +54,7 @@ export default function JarvisCockpit() {
             </div>
           </div>
           <div className="w-80">
-            <AgentSquadPanel />
+            <AgentSquadPanel agentStates={agentStates} />
             <div className="mt-4">
               <DeliveriesPanel />
             </div>
