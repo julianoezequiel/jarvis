@@ -386,16 +386,27 @@ export function useJarvisChat() {
           tryEarlyTts(partial)
         }
 
-        // Stream done — if TTS hasn't started yet, start now with full text
-        if (!ttsStarted && partial) {
-          setStatus('thinking')
-          ttsPromise = speakText(partial, () => setStatus('speaking (stream)'))
+        // Stream done — strip protocol blocks from display, keep raw for orchestrator
+        const cleanPartial = stripProtocols(partial)
+        if (cleanPartial !== partial) {
+          // Update final message with clean text (no [DELEGATE:] blocks visible)
+          setMessages(prev => {
+            const copy = [...prev]
+            const last = copy[copy.length - 1]
+            if (last && last.role === 'assistant') last.text = cleanPartial
+            return copy
+          })
         }
-        if (ttsPromise) await ttsPromise
         // Emite o texto bruto (com blocos DELEGATE) para o orchestrator processar
         if (partial) {
           try { window.dispatchEvent(new CustomEvent('jarvis:assistant-message', { detail: { text: partial } })) } catch (_) {}
         }
+        // TTS uses clean text (without protocol blocks)
+        if (!ttsStarted && cleanPartial) {
+          setStatus('thinking')
+          ttsPromise = speakText(cleanPartial, () => setStatus('speaking (stream)'))
+        }
+        if (ttsPromise) await ttsPromise
         setStatus('done')
         sendingRef.current = false
         return
