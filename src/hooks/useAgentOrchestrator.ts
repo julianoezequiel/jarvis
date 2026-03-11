@@ -29,6 +29,31 @@ const ALL_AGENTS = [
 const initialStates = (): Record<string, AgentState> =>
   Object.fromEntries(ALL_AGENTS.map(id => [id, { id, status: 'idle' }]))
 
+/** Extrai arquivos de código dos blocos markdown gerados pelo @developer */
+function extractCodeFiles(markdown: string): Array<{ path: string; content: string }> {
+  const files: Array<{ path: string; content: string }> = []
+  const regex = /```(html|css|javascript|js|typescript|ts|python|py)[^\n]*\n([\s\S]*?)```/gi
+  let match
+  const seen = new Set<string>()
+  while ((match = regex.exec(markdown)) !== null) {
+    const lang = match[1].toLowerCase()
+    const content = match[2].trim()
+    const ext = ['javascript', 'js'].includes(lang) ? 'js'
+              : ['typescript', 'ts'].includes(lang) ? 'ts'
+              : ['python', 'py'].includes(lang) ? 'py'
+              : lang === 'css' ? 'css' : 'html'
+    const filenameMatch = content.match(/^(?:<!--\s*(?:filename:|file:)?\s*([\w.-]+)\s*-->|\/\/\s*(?:filename:|file:)?\s*([\w.-]+)|#\s*(?:filename:|file:)?\s*([\w.-]+))/)
+    const path = filenameMatch
+      ? (filenameMatch[1] || filenameMatch[2] || filenameMatch[3])
+      : `arquivo-${files.length + 1}.${ext}`
+    if (!seen.has(path) && content.length > 20) {
+      seen.add(path)
+      files.push({ path, content })
+    }
+  }
+  return files
+}
+
 export function useAgentOrchestrator() {
   const [agentStates, setAgentStates] = useState<Record<string, AgentState>>(initialStates)
   const runningRef = useRef<Set<string>>(new Set())
@@ -61,18 +86,6 @@ export function useAgentOrchestrator() {
         window.dispatchEvent(new CustomEvent('jarvis:agent-result', { detail: { agent, task, text } }))
       } catch (_) {}
 
-      // Salva resultado como arquivo na aba DOCS (fire-and-forget)
-      const slug = task.slice(0, 50).toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
-      const ext = (agent === '@developer' || agent === '@automacao-tecnica') ? 'md' : 'md'
-      fetch('/api/jarvis-memory', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tool: 'write_file',
-          payload: { path: `${agent.replace('@', '')}-${slug}.${ext}`, content: text },
-        }),
-      }).catch(() => {})
-
       // Persiste em agent_knowledge (fire-and-forget)
       fetch('/api/jarvis-memory', {
         method: 'POST',
@@ -104,10 +117,35 @@ export function useAgentOrchestrator() {
     const results = await Promise.all(
       delegations.map(async cmd => ({
         agent: cmd.agent,
+        task: cmd.task,
         result: await runAgent(cmd),
       }))
     )
-    return results
+
+    // Agrupa todos os resultados como um projeto ZIP na aba DOCS
+    const firstTask = delegations[0]?.task || 'projeto'
+    const slug = firstTask.slice(0, 40).toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+    const projectName = `${slug}-${Date.now().toString(36)}`
+
+    const files: Array<{ path: string; content: string }> = []
+    for (const { agent, result } of results) {
+      const agentSlug = agent.replace('@', '')
+      // Salva o markdown completo do agente
+      files.push({ path: `${agentSlug}.md`, content: result })
+      // Para @developer e @automacao-tecnica: extrai arquivos de código reais
+      if (agent === '@developer' || agent === '@automacao-tecnica') {
+        const codeFiles = extractCodeFiles(result)
+        files.push(...codeFiles)
+      }
+    }
+
+    fetch('/api/jarvis-memory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool: 'save_project', payload: { project_name: projectName, files } }),
+    }).catch(() => {})
+
+    return results.map(r => ({ agent: r.agent, result: r.result }))
   }, [runAgent])
 
   /** Reseta todos os agentes para idle (ex: ao limpar chat) */
