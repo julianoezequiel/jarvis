@@ -29,38 +29,43 @@ function startRecognition() {
   rec.lang = 'pt-BR'
   rec.interimResults = true
   rec.continuous = true
-  rec.maxAlternatives = 1
+  rec.maxAlternatives = 3
   _rec = rec
 
   rec.onresult = (ev: any) => {
     try {
       let finalText = ''
       let interimText = ''
+      // Pick the alternative with highest confidence when available
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         const r = ev.results[i]
-        if (r.isFinal) finalText += r[0].transcript
-        else interimText += r[0].transcript
+        if (r.isFinal) {
+          // Escolhe a alternativa com maior confiança
+          let best = r[0]
+          for (let a = 1; a < r.length; a++) {
+            if (r[a].confidence > best.confidence) best = r[a]
+          }
+          finalText += best.transcript
+        } else {
+          interimText += r[0].transcript
+        }
       }
 
-      // If there's interim text, emit partial immediately and cancel any pending final
+      // Emite parcial para exibição na caption (não cancela final pendente)
       if (interimText && interimText.trim()) {
         _lastInterimTs = Date.now()
-        if (_finalTimer) { clearTimeout(_finalTimer); _finalTimer = null; _pendingFinalText = '' }
         window.dispatchEvent(new CustomEvent('maya:speech-partial', { detail: { text: interimText.trim() } }))
         console.log('[maya:mic] speech interim:', interimText.trim())
-        return
       }
 
-      // If final text arrives, debounce sending it to allow more speech to arrive
+      // Processa texto final de forma INDEPENDENTE do interim (bug fix: não descartar final)
       if (finalText && finalText.trim()) {
-        _pendingFinalText = finalText.trim()
+        // Acumula frases finais consecutivas (ex: frase longa com pausas)
+        _pendingFinalText = (_pendingFinalText ? _pendingFinalText + ' ' + finalText.trim() : finalText.trim())
         if (_finalTimer) clearTimeout(_finalTimer)
-        // base debounce; increase if we received a recent interim (user still speaking)
-        const now = Date.now()
-        const sinceInterim = now - _lastInterimTs
-        // Reduce debounce to be more responsive: base 1200ms, increase to 2000ms if recent interim detected
-        let debounceMs = 1200
-        if (sinceInterim >= 0 && sinceInterim < 1200) debounceMs = 2000
+        // Debounce mais curto: 600ms sem interim pendente, 1000ms se ainda há fala em andamento
+        const hasRecentInterim = interimText.trim().length > 0
+        const debounceMs = hasRecentInterim ? 1000 : 600
         _finalTimer = setTimeout(() => {
           if (_pendingFinalText) {
             window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text: _pendingFinalText } }))
@@ -70,7 +75,6 @@ function startRecognition() {
           _finalTimer = null
         }, debounceMs)
       }
-      return
     } catch (e) { console.warn('[maya:mic] onresult error', e) }
   }
 

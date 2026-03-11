@@ -526,10 +526,10 @@ export function useMayaChat() {
         return
       }
 
-      // Ignore very short utterances (< 2 words) — likely noise or partial captures
+      // Ignora utterances muito curtas — ruído, sons isolados (mantém palavras únicas válidas)
       const wordCount = raw.trim().split(/\s+/).length
-      if (wordCount < 2) {
-        console.log(`[maya:speech] IGNORED — too short (${wordCount} word(s)): "${raw.trim()}"`)
+      if (wordCount < 1 || raw.trim().length < 2) {
+        console.log(`[maya:speech] IGNORED — too short: "${raw.trim()}"`)
         return
       }
 
