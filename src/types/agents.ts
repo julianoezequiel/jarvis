@@ -1,6 +1,6 @@
 /**
  * agents.ts
- * Tipos centrais para o sistema de 21 agentes do JARVIS AIOS.
+ * Tipos centrais para o sistema de 21 agentes do MAYA AIOS.
  */
 
 // Union de todos os IDs de agentes válidos

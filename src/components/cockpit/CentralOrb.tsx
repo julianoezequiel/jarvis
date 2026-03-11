@@ -1,6 +1,6 @@
 "use client"
 import React, { useEffect, useRef } from 'react'
-import { stopCurrentAudio } from '../../hooks/useJarvisChat'
+import { stopCurrentAudio } from '../../hooks/useMayaChat'
 
 const W = 280
 const H = 280
@@ -171,11 +171,11 @@ export default function CentralOrb() {
     const handler = (e: any) => {
       stateRef.current = e?.detail?.status ?? 'idle'
     }
-    window.addEventListener('jarvis:status', handler as EventListener)
+    window.addEventListener('maya:status', handler as EventListener)
 
     return () => {
       if (animRef.current) cancelAnimationFrame(animRef.current)
-      window.removeEventListener('jarvis:status', handler as EventListener)
+      window.removeEventListener('maya:status', handler as EventListener)
     }
   }, [])
 
@@ -195,8 +195,8 @@ export default function CentralOrb() {
         onClick={() => {
           if (stateRef.current.startsWith('speaking') || stateRef.current === 'thinking' || stateRef.current === 'streaming') {
             stopCurrentAudio()
-            window.dispatchEvent(new CustomEvent('jarvis:status', { detail: { status: 'idle' } }))
-            window.dispatchEvent(new CustomEvent('jarvis:stop'))
+            window.dispatchEvent(new CustomEvent('maya:status', { detail: { status: 'idle' } }))
+            window.dispatchEvent(new CustomEvent('maya:stop'))
           }
         }}
       />

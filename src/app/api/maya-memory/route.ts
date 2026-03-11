@@ -1,4 +1,4 @@
-import { supabase, saveJarvisFile } from '../../../lib/supabase'
+import { supabase, saveMayaFile } from '../../../lib/supabase'
 import fs from 'fs'
 import path from 'path'
 
@@ -170,7 +170,7 @@ export async function POST(req: Request) {
         if (!p?.path || !p?.content) {
           return new Response(JSON.stringify({ error: 'missing path or content' }), { status: 400 })
         }
-        const res = await saveJarvisFile(p.path, p.content, p.project_name || undefined)
+        const res = await saveMayaFile(p.path, p.content, p.project_name || undefined)
         if (res.error) return new Response(JSON.stringify({ error: res.error.message }), { status: 500 })
         return new Response(JSON.stringify({ ok: true, data: res.data }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       }

@@ -18,7 +18,7 @@ export default function PasswordGate({ onUnlock }: { onUnlock: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
       <form onSubmit={submit} className={`bg-[#071017] p-6 rounded shadow-lg w-80 ${err ? 'animate-shake' : ''}`}>
-        <h3 className="text-lg text-jarvisCyan mb-2">Enter Password</h3>
+        <h3 className="text-lg text-mayaCyan mb-2">Enter Password</h3>
         <input
           autoFocus
           value={pwd}
@@ -29,9 +29,10 @@ export default function PasswordGate({ onUnlock }: { onUnlock: () => void }) {
           autoComplete="off"
         />
         <div className="flex justify-end">
-          <button className="px-3 py-1 bg-jarvisCyan rounded text-black">Unlock</button>
+          <button className="px-3 py-1 bg-mayaCyan rounded text-black">Unlock</button>
         </div>
       </form>
     </div>
   )
 }
+

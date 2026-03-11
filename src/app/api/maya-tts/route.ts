@@ -1,5 +1,5 @@
 // TTS endpoint — fallback chain: Azure TTS → Gemini 2.5 Flash TTS → OpenAI tts-1 → 503
-// Client-side (useJarvisChat) uses browser SpeechSynthesis when this returns non-200
+// Client-side (useMayaChat) uses browser SpeechSynthesis when this returns non-200
 
 // Azure TTS — Francisca (pt-BR, Neural) — 500k chars/mês grátis
 // Obter keys em: portal.azure.com → Cognitive Services → Speech
@@ -27,7 +27,7 @@ async function tryAzure(text: string): Promise<Response | null> {
     })
 
     if (!res.ok) {
-      console.warn('[jarvis-tts] Azure failed:', res.status, await res.text().catch(() => ''))
+      console.warn('[maya-tts] Azure failed:', res.status, await res.text().catch(() => ''))
       return null
     }
 
@@ -37,7 +37,7 @@ async function tryAzure(text: string): Promise<Response | null> {
       headers: { 'Content-Type': 'audio/mpeg', 'Content-Length': String(buf.byteLength), 'Cache-Control': 'no-store', 'X-TTS-Provider': 'azure-francisca' },
     })
   } catch (e) {
-    console.warn('[jarvis-tts] Azure error:', e)
+    console.warn('[maya-tts] Azure error:', e)
     return null
   }
 }
@@ -61,7 +61,7 @@ async function tryOpenAI(text: string, voice: string): Promise<Response | null> 
   }
 
   if (!res.ok) {
-    console.warn('[jarvis-tts] OpenAI failed:', res.status)
+    console.warn('[maya-tts] OpenAI failed:', res.status)
     return null
   }
 
@@ -106,7 +106,7 @@ async function tryGemini(text: string): Promise<Response | null> {
 
       if (!res.ok) {
         const errBody = await res.text().catch(() => '')
-        console.warn('[jarvis-tts] Gemini HTTP', res.status, errBody.slice(0, 300))
+        console.warn('[maya-tts] Gemini HTTP', res.status, errBody.slice(0, 300))
         continue
       }
 
@@ -114,7 +114,7 @@ async function tryGemini(text: string): Promise<Response | null> {
       const b64 = j?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data as string | undefined
 
       if (!b64) {
-        console.warn('[jarvis-tts] Gemini no audio, finishReason:', j?.candidates?.[0]?.finishReason)
+        console.warn('[maya-tts] Gemini no audio, finishReason:', j?.candidates?.[0]?.finishReason)
         continue
       }
 
@@ -125,7 +125,7 @@ async function tryGemini(text: string): Promise<Response | null> {
         headers: { 'Content-Type': 'audio/wav', 'Content-Length': String(wav.byteLength), 'Cache-Control': 'no-store', 'X-TTS-Provider': `gemini-${voiceName}` },
       })
     } catch (e) {
-      console.warn('[jarvis-tts] Gemini error:', e)
+      console.warn('[maya-tts] Gemini error:', e)
     }
   }
 
@@ -139,7 +139,7 @@ export async function POST(req: Request) {
       return new Response(JSON.stringify({ error: 'text required' }), { status: 400 })
     }
 
-    const voice = process.env.NEXT_PUBLIC_JARVIS_VOICE || 'nova'
+    const voice = process.env.NEXT_PUBLIC_MAYA_VOICE || 'nova'
 
     // 1. Azure TTS — Francisca pt-BR Neural (500k chars/mês grátis)
     const azureRes = await tryAzure(text)
@@ -154,11 +154,12 @@ export async function POST(req: Request) {
     if (openaiRes) return openaiRes
 
     // 4. All failed — client will use browser SpeechSynthesis
-    console.error('[jarvis-tts] All providers failed')
+    console.error('[maya-tts] All providers failed')
     return new Response(JSON.stringify({ error: 'All TTS providers failed' }), { status: 503 })
 
   } catch (err) {
-    console.error('[jarvis-tts] unhandled error', err)
+    console.error('[maya-tts] unhandled error', err)
     return new Response(JSON.stringify({ error: String(err) }), { status: 500 })
   }
 }
+

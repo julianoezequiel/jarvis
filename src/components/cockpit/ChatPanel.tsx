@@ -1,12 +1,12 @@
 "use client"
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { useJarvisChat } from '../../hooks/useJarvisChat'
+import { useMayaChat } from '../../hooks/useMayaChat'
 
 const VISIBLE_COUNT = 8
 
 async function saveFactFromMessage(text: string): Promise<boolean> {
   try {
-    const res = await fetch('/api/jarvis-memory', {
+    const res = await fetch('/api/maya-memory', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tool: 'remember_fact', payload: { fact: text, category: 'pinned', importance: 3, source: 'user-pin' } }),
@@ -19,7 +19,7 @@ async function saveFactFromMessage(text: string): Promise<boolean> {
 }
 
 export default function ChatPanel() {
-  const { messages, status, listenEnabled, setListen, sendMessage, addUserMessage, stopAudio } = useJarvisChat()
+  const { messages, status, listenEnabled, setListen, sendMessage, addUserMessage, stopAudio } = useMayaChat()
   const [text, setText] = useState('')
   const [open, setOpen] = useState(false)
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set())

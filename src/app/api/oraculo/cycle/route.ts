@@ -50,7 +50,7 @@ export async function POST(req: Request) {
             body: JSON.stringify({
               model: 'claude-sonnet-4-6',
               max_tokens: 600,
-              system: `Você é o ORÁCULO do JARVIS — um pesquisador autônomo que mantém o usuário informado sobre tendências relevantes. 
+              system: `Você é o ORÁCULO do MAYA — um pesquisador autônomo que mantém o usuário informado sobre tendências relevantes. 
 Sua missão: pesquisar e sintetizar informações atualizadas sobre o tópico dado.
 Regras:
 - Forneça uma síntese objetiva e acionável (máx 400 palavras)

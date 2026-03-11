@@ -78,7 +78,7 @@ export async function POST(req: Request) {
           const mod = await import('../../../lib/supabase')
           supabaseClient = mod.supabase
         } catch (e) {
-          console.warn('supabase client not available for jarvis-chat', String(e))
+          console.warn('supabase client not available for maya-chat', String(e))
         }
       }
       if (supabaseClient) {
@@ -139,7 +139,7 @@ export async function POST(req: Request) {
     if (isPendingClear && isConfirming) {
       // Passo 2: confirmado — executar limpeza
       try {
-        await fetch(`${baseUrl}/api/jarvis-memory`, {
+        await fetch(`${baseUrl}/api/maya-memory`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tool: 'clear_memory', payload: { scope: 'all', sessionId } }),
@@ -160,7 +160,7 @@ export async function POST(req: Request) {
       const factToSave = memorizeMatch[2].trim()
       if (factToSave.length > 0) {
         // fire-and-forget via internal API
-        fetch(`${baseUrl}/api/jarvis-memory`, {
+        fetch(`${baseUrl}/api/maya-memory`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tool: 'remember_fact', payload: { fact: factToSave, category: 'user-request', importance: 2, source: 'auto-detect' } }),
@@ -177,7 +177,7 @@ export async function POST(req: Request) {
     const declaredName = nameStatementMatch ? nameStatementMatch[1].trim() : null
     if (identityMatch && !memorizeMatch) {
       const factToSave = userMessage.trim()
-      fetch(`${baseUrl}/api/jarvis-memory`, {
+      fetch(`${baseUrl}/api/maya-memory`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tool: 'remember_fact', payload: { fact: factToSave, category: 'identity', importance: 4, source: 'auto-identity' } }),
@@ -501,7 +501,7 @@ export async function POST(req: Request) {
     }
 
     // Last resort echo — todos os providers falharam
-    console.warn('[jarvis-chat] No provider returned text — using echo fallback')
+    console.warn('[maya-chat] No provider returned text — using echo fallback')
 
     // Se tiver facts explícitos salvos, mencionar apenas eles (nunca mensagens brutas do histórico)
     let echoText = 'Os modelos de IA estão temporariamente indisponíveis. Tente novamente em alguns instantes.'

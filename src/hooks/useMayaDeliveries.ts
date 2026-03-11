@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
-export interface JarvisFile {
+export interface MayaFile {
   id: string
   path: string
   content: string
@@ -13,18 +13,18 @@ export interface JarvisFile {
 
 export interface ProjectGroup {
   project_name: string
-  files: JarvisFile[]
+  files: MayaFile[]
   created_at: string
 }
 
 export interface DeliveriesState {
   projects: ProjectGroup[]
-  looseFiles: JarvisFile[]
+  looseFiles: MayaFile[]
   totalCount: number
   loading: boolean
 }
 
-export function useJarvisDeliveries() {
+export function useMayaDeliveries() {
   const [state, setState] = useState<DeliveriesState>({
     projects: [],
     looseFiles: [],
@@ -43,10 +43,10 @@ export function useJarvisDeliveries() {
 
     if (error || !data) return
 
-    const projects: Record<string, JarvisFile[]> = {}
-    const looseFiles: JarvisFile[] = []
+    const projects: Record<string, MayaFile[]> = {}
+    const looseFiles: MayaFile[] = []
 
-    for (const file of data as JarvisFile[]) {
+    for (const file of data as MayaFile[]) {
       if (file.project_name) {
         if (!projects[file.project_name]) projects[file.project_name] = []
         projects[file.project_name].push(file)
@@ -65,7 +65,7 @@ export function useJarvisDeliveries() {
 
     setState(prev => {
       if (newTotal > prev.totalCount && prev.totalCount > 0) {
-        window.dispatchEvent(new CustomEvent('jarvis:new-delivery'))
+        window.dispatchEvent(new CustomEvent('maya:new-delivery'))
       }
       return { projects: projectGroups, looseFiles, totalCount: newTotal, loading: false }
     })

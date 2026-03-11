@@ -17,7 +17,7 @@ const DEFAULTS: Settings = {
 
 async function clearAllMemory(): Promise<boolean> {
   try {
-    const res = await fetch('/api/jarvis-memory', {
+    const res = await fetch('/api/maya-memory', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tool: 'clear_memory', payload: { scope: 'all' } }),
@@ -25,11 +25,11 @@ async function clearAllMemory(): Promise<boolean> {
     const j = await res.json().catch(() => null)
     // Limpar localStorage de mensagens e session
     try {
-      localStorage.removeItem('jarvis_messages')
-      localStorage.removeItem('jarvis_session_id')
+      localStorage.removeItem('maya_messages')
+      localStorage.removeItem('maya_session_id')
     } catch (_) {}
     // Sinalizar para o ChatPanel limpar o estado de mensagens
-    try { window.dispatchEvent(new CustomEvent('jarvis:clear-messages')) } catch (_) {}
+    try { window.dispatchEvent(new CustomEvent('maya:clear-messages')) } catch (_) {}
     return j?.ok === true
   } catch {
     return false

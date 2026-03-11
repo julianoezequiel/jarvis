@@ -14,7 +14,7 @@ import { useAgentOrchestrator } from '../../hooks/useAgentOrchestrator'
 
 type Phase = 'locked' | 'mic-prompt' | 'booting' | 'ready'
 
-export default function JarvisCockpit() {
+export default function MayaCockpit() {
   const [phase, setPhase] = useState<Phase>('locked')
   const [showSettings, setShowSettings] = useState(false)
   const [rightTab, setRightTab] = useState<'agents' | 'docs'>('agents')
@@ -22,8 +22,8 @@ export default function JarvisCockpit() {
 
   useEffect(() => {
     const handler = () => setRightTab('docs')
-    window.addEventListener('jarvis:new-delivery', handler)
-    return () => window.removeEventListener('jarvis:new-delivery', handler)
+    window.addEventListener('maya:new-delivery', handler)
+    return () => window.removeEventListener('maya:new-delivery', handler)
   }, [])
 
   return (

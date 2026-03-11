@@ -40,11 +40,11 @@ export default function SpeechCaption() {
       }, 2500)
     }
 
-    window.addEventListener('jarvis:speech-partial', onPartial)
-    window.addEventListener('jarvis:speech', onFinal)
+    window.addEventListener('maya:speech-partial', onPartial)
+    window.addEventListener('maya:speech', onFinal)
     return () => {
-      window.removeEventListener('jarvis:speech-partial', onPartial)
-      window.removeEventListener('jarvis:speech', onFinal)
+      window.removeEventListener('maya:speech-partial', onPartial)
+      window.removeEventListener('maya:speech', onFinal)
       clearHide()
     }
   }, [])

@@ -6,12 +6,12 @@
  */
 
 const INTERVAL_MS = parseInt(process.env.WORKER_INTERVAL_MS || '180000', 10) // default 3 minutes
-const JARVIS_BASE = process.env.JARVIS_BASE_URL || 'http://localhost:3000'
+const MAYA_BASE = process.env.MAYA_BASE_URL || 'http://localhost:3000'
 const AGENTS = ['@analyst', '@developer', '@researcher', '@writer', '@ux-design-expert', '@manager']
 
 async function callAgent(agent, task, context = '') {
   try {
-    const res = await fetch(`${JARVIS_BASE}/api/agent-execute`, {
+    const res = await fetch(`${MAYA_BASE}/api/agent-execute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ agent, task, context }),
@@ -25,7 +25,7 @@ async function callAgent(agent, task, context = '') {
 
 async function saveBrief(path, content, projectName = 'oraculo') {
   try {
-    const res = await fetch(`${JARVIS_BASE}/api/jarvis-memory`, {
+    const res = await fetch(`${MAYA_BASE}/api/maya-memory`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tool: 'write_file', payload: { path, content, project_name: projectName } }),

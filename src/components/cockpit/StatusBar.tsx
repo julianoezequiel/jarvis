@@ -40,7 +40,7 @@ export default function StatusBar({ showSettings, setShowSettings }: StatusBarPr
 
   return (
     <header className="h-10 bg-black/20 backdrop-blur-sm flex items-center px-4">
-      <div className="text-xs text-jarvisCyan">MAYA AIOS</div>
+      <div className="text-xs text-mayaCyan">MAYA AIOS</div>
       <div className="flex-1 text-right text-xs text-gray-300">{now}</div>
       <button
         onClick={() => setShowSettings(true)}
@@ -54,3 +54,4 @@ export default function StatusBar({ showSettings, setShowSettings }: StatusBarPr
     </header>
   )
 }
+

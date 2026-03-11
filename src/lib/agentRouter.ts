@@ -1,6 +1,6 @@
 /**
  * agentRouter.ts
- * Parseia blocos [DELEGATE: {...}] e [EXECUTE: {...}] do texto emitido pelo JARVIS/MAYA.
+ * Parseia blocos [DELEGATE: {...}] e [EXECUTE: {...}] do texto emitido pelo MAYA/MAYA.
  */
 
 export interface DelegateCommand {

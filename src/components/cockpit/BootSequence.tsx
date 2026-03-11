@@ -26,17 +26,18 @@ export default function BootSequence({ onDone }: { onDone: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90">
       <div className="bg-[#071017] p-6 rounded shadow-lg w-96 text-left">
-        <h3 className="text-jarvisCyan mb-3">Boot sequence</h3>
+        <h3 className="text-mayaCyan mb-3">Boot sequence</h3>
         <div className="text-xs text-gray-300 mb-3">
           {lines.map((l, i) => (
-            <div key={l} className={`mb-1 ${i === activeLine ? 'text-jarvisCyan' : 'text-gray-500'}`}>{i === activeLine ? '• ' : '  '}{l}</div>
+            <div key={l} className={`mb-1 ${i === activeLine ? 'text-mayaCyan' : 'text-gray-500'}`}>{i === activeLine ? '• ' : '  '}{l}</div>
           ))}
         </div>
         <div className="w-full bg-gray-800 h-2 rounded overflow-hidden">
-          <div style={{ width: `${progress}%` }} className="h-2 bg-jarvisCyan" />
+          <div style={{ width: `${progress}%` }} className="h-2 bg-mayaCyan" />
         </div>
         <div className="text-xs text-gray-400 mt-2">{progress}%</div>
       </div>
     </div>
   )
 }
+

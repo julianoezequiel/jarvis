@@ -1,11 +1,11 @@
 'use client'
 import dynamic from 'next/dynamic'
 
-const JarvisCockpit = dynamic(
-  () => import('./JarvisCockpit'),
+const MayaCockpit = dynamic(
+  () => import('./MayaCockpit'),
   { ssr: false }
 )
 
 export default function CockpitLoader() {
-  return <JarvisCockpit />
+  return <MayaCockpit />
 }

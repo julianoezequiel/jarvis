@@ -1,7 +1,7 @@
 "use client"
 import React, { useState } from 'react'
 import JSZip from 'jszip'
-import { useJarvisDeliveries, ProjectGroup, JarvisFile } from '../../hooks/useJarvisDeliveries'
+import { useMayaDeliveries, ProjectGroup, MayaFile } from '../../hooks/useMayaDeliveries'
 
 async function downloadZip(group: ProjectGroup) {
   const zip = new JSZip()
@@ -18,7 +18,7 @@ async function downloadZip(group: ProjectGroup) {
   URL.revokeObjectURL(url)
 }
 
-function downloadFile(file: JarvisFile) {
+function downloadFile(file: MayaFile) {
   const blob = new Blob([file.content], { type: 'text/plain' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -92,7 +92,7 @@ function ProjectCard({ group }: { group: ProjectGroup }) {
   )
 }
 
-function LooseFileCard({ file }: { file: JarvisFile }) {
+function LooseFileCard({ file }: { file: MayaFile }) {
   return (
     <div style={{
       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -123,7 +123,7 @@ function LooseFileCard({ file }: { file: JarvisFile }) {
 }
 
 export default function DeliveriesPanel() {
-  const { projects, looseFiles, loading } = useJarvisDeliveries()
+  const { projects, looseFiles, loading } = useMayaDeliveries()
   const isEmpty = projects.length === 0 && looseFiles.length === 0
 
   return (
@@ -136,7 +136,7 @@ export default function DeliveriesPanel() {
       {isEmpty && !loading && (
         <div style={{ fontSize: 10, color: '#475569', padding: '16px 0', textAlign: 'center' }}>
           Nenhuma entrega ainda.{'\n'}
-          Peça ao JARVIS para criar arquivos ou projetos.
+          Peça ao MAYA para criar arquivos ou projetos.
         </div>
       )}
       {projects.map(g => <ProjectCard key={g.project_name} group={g} />)}

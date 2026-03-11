@@ -10,7 +10,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
 export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey)
 
-export async function saveJarvisFile(path: string, content: string, projectName?: string) {
+export async function saveMayaFile(path: string, content: string, projectName?: string) {
   return supabase.from('jarvis_files').insert([
     { path, content, project_name: projectName || null }
   ])

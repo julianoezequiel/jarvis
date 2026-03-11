@@ -83,11 +83,11 @@ export function useAgentOrchestrator() {
 
       // Injeta resultado no chat via evento global
       try {
-        window.dispatchEvent(new CustomEvent('jarvis:agent-result', { detail: { agent, task, text } }))
+        window.dispatchEvent(new CustomEvent('maya:agent-result', { detail: { agent, task, text } }))
       } catch (_) {}
 
       // Persiste em agent_knowledge (fire-and-forget)
-      fetch('/api/jarvis-memory', {
+      fetch('/api/maya-memory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -139,7 +139,7 @@ export function useAgentOrchestrator() {
       }
     }
 
-    fetch('/api/jarvis-memory', {
+    fetch('/api/maya-memory', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tool: 'save_project', payload: { project_name: projectName, files } }),
@@ -154,14 +154,14 @@ export function useAgentOrchestrator() {
     runningRef.current.clear()
   }, [])
 
-  /** Escuta o evento global emitido pelo useJarvisChat e processa DELEGATEs automaticamente */
+  /** Escuta o evento global emitido pelo useMayaChat e processa DELEGATEs automaticamente */
   useEffect(() => {
     const handler = (e: Event) => {
       const text = (e as CustomEvent<{ text: string }>).detail?.text
       if (text) processDelegations(text)
     }
-    window.addEventListener('jarvis:assistant-message', handler)
-    return () => window.removeEventListener('jarvis:assistant-message', handler)
+    window.addEventListener('maya:assistant-message', handler)
+    return () => window.removeEventListener('maya:assistant-message', handler)
   }, [processDelegations])
 
   return { agentStates, processDelegations, resetAgents }

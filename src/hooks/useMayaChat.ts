@@ -9,10 +9,10 @@ export type ChatMessage = { id: string; role: 'user' | 'assistant' | 'system'; t
 let _speakGeneration = 0
 let _activeAudio: HTMLAudioElement | null = null
 
-// Mute/unmute the speech recognition while JARVIS is speaking to prevent feedback loop
+// Mute/unmute the speech recognition while MAYA is speaking to prevent feedback loop
 function dispatchMicControl(enabled: boolean) {
   if (typeof window !== 'undefined') {
-    try { window.dispatchEvent(new CustomEvent('jarvis:listen-control', { detail: { enabled } })) } catch (_) {}
+    try { window.dispatchEvent(new CustomEvent('maya:listen-control', { detail: { enabled } })) } catch (_) {}
   }
 }
 
@@ -80,7 +80,7 @@ async function speakText(text: string, onPlayStart?: () => void): Promise<void> 
 
   if (isStale()) return
 
-  // Mute mic while JARVIS is speaking — prevents the speaker audio from re-entering the mic
+  // Mute mic while MAYA is speaking — prevents the speaker audio from re-entering the mic
   dispatchMicControl(false)
 
   try {
@@ -105,7 +105,7 @@ async function speakText(text: string, onPlayStart?: () => void): Promise<void> 
     const controller = new AbortController()
 
     // Race: Gemini TTS fetch vs 5s fallback timer
-    const geminiPromise = fetch('/api/jarvis-tts', {
+    const geminiPromise = fetch('/api/maya-tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, provider: settings.ttsProvider, voice: settings.ttsVoice }),
@@ -161,13 +161,13 @@ async function speakText(text: string, onPlayStart?: () => void): Promise<void> 
   }
 }
 
-export function useJarvisChat() {
+export function useMayaChat() {
   // Ensure a persistent session id exists per browser (used to scope memory)
   const [sessionId, setSessionId] = useState<string | null>(null)
   useEffect(() => {
     try {
       if (typeof window === 'undefined') return
-      const key = 'jarvis_session_id'
+      const key = 'maya_session_id'
       let sid = window.localStorage.getItem(key)
       if (!sid) {
         try {
@@ -206,7 +206,7 @@ export function useJarvisChat() {
     _setStatus(s)
     try {
       if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-        window.dispatchEvent(new CustomEvent('jarvis:status', { detail: { status: s } }))
+        window.dispatchEvent(new CustomEvent('maya:status', { detail: { status: s } }))
       }
     } catch (e) { /* ignore */ }
   }, [])
@@ -216,8 +216,8 @@ export function useJarvisChat() {
   // Ouvir evento de limpeza de mensagens (disparado pelo SettingsPanel ou pelo retorno do servidor)
   useEffect(() => {
     const handler = () => setMessages([])
-    window.addEventListener('jarvis:clear-messages', handler)
-    return () => window.removeEventListener('jarvis:clear-messages', handler)
+    window.addEventListener('maya:clear-messages', handler)
+    return () => window.removeEventListener('maya:clear-messages', handler)
   }, [])
 
   // Ouvir resultados dos agentes e injetar como mensagens do sistema no chat
@@ -233,15 +233,15 @@ export function useJarvisChat() {
         { id: `agent-${agent}-${Date.now()}`, role: 'system', text: msg },
       ])
     }
-    window.addEventListener('jarvis:agent-result', handler)
-    return () => window.removeEventListener('jarvis:agent-result', handler)
+    window.addEventListener('maya:agent-result', handler)
+    return () => window.removeEventListener('maya:agent-result', handler)
   }, [])
 
   // Persist messages to localStorage so history is kept across reloads
   useEffect(() => {
     try {
       if (typeof window === 'undefined') return
-      const raw = window.localStorage.getItem('jarvis_messages')
+      const raw = window.localStorage.getItem('maya_messages')
       if (raw) {
         const parsed = JSON.parse(raw) as ChatMessage[]
         if (Array.isArray(parsed)) setMessages(parsed)
@@ -255,7 +255,7 @@ export function useJarvisChat() {
     messagesRef.current = messages
     try {
       if (typeof window === 'undefined') return
-      window.localStorage.setItem('jarvis_messages', JSON.stringify(messages))
+      window.localStorage.setItem('maya_messages', JSON.stringify(messages))
     } catch (e) {
       // ignore storage errors
     }
@@ -302,7 +302,7 @@ export function useJarvisChat() {
         // If the user message is a vague reference, request recent session-scoped memories only
         if (isVagueReference(payload.message) && effectiveSessionId) {
           try {
-            const memRes = await fetch('/api/jarvis-memory', {
+            const memRes = await fetch('/api/maya-memory', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ tool: 'search_memory', payload: { sessionId: effectiveSessionId, limit: 6 } }),
@@ -316,7 +316,7 @@ export function useJarvisChat() {
             console.warn('[memory] session fetch failed', e)
           }
         } else {
-          const memRes = await fetch('/api/jarvis-memory', {
+          const memRes = await fetch('/api/maya-memory', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tool: 'search_memory', payload: { query: payload.message, limit: 6, sessionId: effectiveSessionId } }),
@@ -340,7 +340,7 @@ export function useJarvisChat() {
       const chatBody = Object.assign({}, payload, memoryBlock ? { memory: memoryBlock } : {}, effectiveSessionId ? { sessionId: effectiveSessionId } : {}, { recentMessages: recent },
         payload.imageBase64 ? { imageBase64: payload.imageBase64, imageMime: payload.imageMime || 'image/png' } : {})
 
-      const res = await fetch('/api/jarvis-chat', {
+      const res = await fetch('/api/maya-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(chatBody),
@@ -398,7 +398,7 @@ export function useJarvisChat() {
           })
           // Conditional console log for streaming assistant text
           try {
-            if (isLogEnabled()) console.log('[jarvis:log] assistant (stream):', partial, { sessionId: effectiveSessionId || sessionId })
+            if (isLogEnabled()) console.log('[maya:log] assistant (stream):', partial, { sessionId: effectiveSessionId || sessionId })
           } catch (_) {}
           tryEarlyTts(partial)
         }
@@ -416,7 +416,7 @@ export function useJarvisChat() {
         }
         // Emite o texto bruto (com blocos DELEGATE) para o orchestrator processar
         if (partial) {
-          try { window.dispatchEvent(new CustomEvent('jarvis:assistant-message', { detail: { text: partial } })) } catch (_) {}
+          try { window.dispatchEvent(new CustomEvent('maya:assistant-message', { detail: { text: partial } })) } catch (_) {}
         }
         // TTS uses clean text (without protocol blocks)
         if (!ttsStarted && cleanPartial) {
@@ -437,17 +437,17 @@ export function useJarvisChat() {
 
         // Se o servidor confirmou a limpeza de memória, zerar histórico local também
         if (json.provider === 'system' && /apaguei todo o hist/i.test(assistantText)) {
-          try { window.localStorage.removeItem('jarvis_messages') } catch (_) {}
-          try { window.localStorage.removeItem('jarvis_session_id') } catch (_) {}
+          try { window.localStorage.removeItem('maya_messages') } catch (_) {}
+          try { window.localStorage.removeItem('maya_session_id') } catch (_) {}
           setMessages([{ id: String(Date.now()), role: 'assistant', text: cleanText }])
-          try { window.dispatchEvent(new CustomEvent('jarvis:clear-messages')) } catch (_) {}
+          try { window.dispatchEvent(new CustomEvent('maya:clear-messages')) } catch (_) {}
         } else {
           setMessages((m) => [...m, { id: String(Date.now()), role: 'assistant', text: cleanText }])
         }
 
-        if (isLogEnabled()) console.log('[jarvis:log] assistant:', assistantText, { sessionId: effectiveSessionId || sessionId })
+        if (isLogEnabled()) console.log('[maya:log] assistant:', assistantText, { sessionId: effectiveSessionId || sessionId })
         // Emite o texto bruto para o orchestrator detectar blocos DELEGATE
-        try { window.dispatchEvent(new CustomEvent('jarvis:assistant-message', { detail: { text: assistantText } })) } catch (_) {}
+        try { window.dispatchEvent(new CustomEvent('maya:assistant-message', { detail: { text: assistantText } })) } catch (_) {}
         // Stay in 'thinking' until audio actually starts playing
         setStatus('thinking')
         await speakText(cleanText, () => setStatus(`speaking (${json.provider ?? 'ai'})`))
@@ -476,7 +476,7 @@ export function useJarvisChat() {
       if (last && last.role === 'user' && last.text === text) return m
       return [...m, { id: String(Date.now()), role: 'user', text }]
     })
-    try { if (isLogEnabled()) console.log('[jarvis:log] user:', text, { sessionId }) } catch (_) {}
+    try { if (isLogEnabled()) console.log('[maya:log] user:', text, { sessionId }) } catch (_) {}
   }, [sessionId, isLogEnabled])
 
   const [listenEnabled, setListenEnabled] = useState(true)
@@ -487,9 +487,9 @@ export function useJarvisChat() {
 
   // Control mic on/off
   const setListen = useCallback((enabled: boolean) => {
-    console.log(`[jarvis:chat] setListen(${enabled}) called`, new Error().stack?.split('\n').slice(1, 4).join(' | '))
+    console.log(`[maya:chat] setListen(${enabled}) called`, new Error().stack?.split('\n').slice(1, 4).join(' | '))
     setListenEnabled(enabled)
-    window.dispatchEvent(new CustomEvent('jarvis:listen-control', { detail: { enabled } }))
+    window.dispatchEvent(new CustomEvent('maya:listen-control', { detail: { enabled } }))
     setStatus(enabled ? 'idle' : 'mic-off')
   }, [setStatus])
 
@@ -502,17 +502,17 @@ export function useJarvisChat() {
       if (typeof raw !== 'string' || !raw.trim()) return
       const normalized = raw.trim().toLowerCase()
       const currentStatus = statusRef.current
-      console.log(`[jarvis:speech] received: "${normalized}" | status: ${currentStatus}`)
+      console.log(`[maya:speech] received: "${normalized}" | status: ${currentStatus}`)
 
       // If audio is currently playing, ignore speech events to avoid cutting TTS
       if (_activeAudio) {
-        console.log('[jarvis:speech] BLOCKED — audio currently playing')
+        console.log('[maya:speech] BLOCKED — audio currently playing')
         return
       }
 
       // Always allow explicit stop commands — even while speaking
       if (STOP_COMMANDS.some(cmd => normalized === cmd || normalized.startsWith(cmd + ' ') || normalized.endsWith(' ' + cmd))) {
-        console.log('[jarvis:speech] STOP command matched — aborting audio')
+        console.log('[maya:speech] STOP command matched — aborting audio')
         stopCurrentAudio()
         abortRef.current?.abort()
         sendingRef.current = false
@@ -520,21 +520,21 @@ export function useJarvisChat() {
         return
       }
 
-      // While JARVIS is speaking or thinking, ignore mic input (avoid feedback loop)
+      // While MAYA is speaking or thinking, ignore mic input (avoid feedback loop)
       if (currentStatus.startsWith('speaking') || currentStatus === 'thinking' || currentStatus === 'streaming') {
-        console.log(`[jarvis:speech] BLOCKED — status is "${currentStatus}"`)
+        console.log(`[maya:speech] BLOCKED — status is "${currentStatus}"`)
         return
       }
 
       // Ignore very short utterances (< 2 words) — likely noise or partial captures
       const wordCount = raw.trim().split(/\s+/).length
       if (wordCount < 2) {
-        console.log(`[jarvis:speech] IGNORED — too short (${wordCount} word(s)): "${raw.trim()}"`)
+        console.log(`[maya:speech] IGNORED — too short (${wordCount} word(s)): "${raw.trim()}"`)
         return
       }
 
       // Normal message
-      console.log(`[jarvis:speech] SENDING to LLM: "${raw.trim()}"`)
+      console.log(`[maya:speech] SENDING to LLM: "${raw.trim()}"`)
       stopCurrentAudio()
       abortRef.current?.abort()
       setStatus('thinking')
@@ -542,8 +542,8 @@ export function useJarvisChat() {
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       sendMessage({ message: raw.trim() })
     }
-    window.addEventListener('jarvis:speech', handler as EventListener)
-    return () => window.removeEventListener('jarvis:speech', handler as EventListener)
+    window.addEventListener('maya:speech', handler as EventListener)
+    return () => window.removeEventListener('maya:speech', handler as EventListener)
   }, [addUserMessage, sendMessage, setStatus, setListen])
 
   const clear = useCallback(() => setMessages([]), [])
@@ -555,14 +555,14 @@ export function useJarvisChat() {
     setStatus('idle')
   }, [setStatus])
 
-  // jarvis:stop event — fired by CentralOrb click or other UI controls
+  // maya:stop event — fired by CentralOrb click or other UI controls
   useEffect(() => {
     const handler = () => {
       abortRef.current?.abort()
       sendingRef.current = false
     }
-    window.addEventListener('jarvis:stop', handler)
-    return () => window.removeEventListener('jarvis:stop', handler)
+    window.addEventListener('maya:stop', handler)
+    return () => window.removeEventListener('maya:stop', handler)
   }, [])
 
   return { messages, status: _status, listenEnabled, setListen, sendMessage, addUserMessage, stopAudio, clear }
