@@ -1,0 +1,93 @@
+version: '3.8'
+services:
+  web:
+    image: node:20
+    working_dir: /app
+    volumes:
+      - ./:/app:cached
+    command: sh -c "npm ci && npm run build && npm start"
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.onpremise
+    depends_on:
+      - redis
+      - rabbitmq
+      - minio
+      - postgres
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --compat
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    ports:
+      - "9000:9000"
+    volumes:
+      - minio-data:/data
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: jarvis
+      POSTGRES_USER: jarvis
+      POSTGRES_PASSWORD: jarvis
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  jarvis-worker:
+    image: node:20
+    working_dir: /app
+    volumes:
+      - ./:/app:cached
+    command: sh -c "npm ci --silent && node jarvis-worker.js"
+    env_file:
+      - .env.onpremise
+    depends_on:
+      - web
+      - postgres
+      - redis
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  aios:
+    image: node:20
+    working_dir: /app
+    volumes:
+      - ./:/app:cached
+    command: sh -c "npm ci --silent && node src/aios/index.js"
+    env_file:
+      - .env.onpremise
+    ports:
+      - "4000:4000"
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  minio-data:
+  pgdata:

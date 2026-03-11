@@ -1,0 +1,21 @@
+node_modules
+/.env.local
+.env
+.env.*.local
+
+# Next.js build output
+.next/
+out/
+
+# Logs
+*.log
+*.err
+
+# Test artifacts / local data
+data/local_memory.json
+
+# TypeScript build cache
+tsconfig.tsbuildinfo
+
+# Supabase temp
+supabase/.temp/

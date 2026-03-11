@@ -1,0 +1,72 @@
+
+/* Basic global styles (no Tailwind required) */
+html, body, #__next {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #020609;
+  color: #ffffff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: var(--font-share-tech-mono), 'Share Tech Mono', monospace;
+}
+
+.hud-corner {
+  box-shadow: 0 0 24px rgba(0,212,255,0.06);
+}
+
+.central-orb {
+  width: 280px;
+  height: 280px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 30% 30%, rgba(0,212,255,0.12), transparent 40%), rgba(255,255,255,0.02);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Caption animations */
+@keyframes fadeInCaption {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes captionScan {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+@keyframes chatExpand {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Utility-like classes used by components */
+.min-h-screen { min-height: 100vh; }
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.flex-1 { flex: 1 1 auto; }
+.gap-4 { gap: 1rem; }
+.p-6 { padding: 1.5rem; }
+.w-80 { width: 20rem; }
+.bg-black\/20 { background-color: rgba(0,0,0,0.2); }
+.bg-black\/30 { background-color: rgba(0,0,0,0.3); }
+.rounded { border-radius: 0.5rem; }
+.p-3 { padding: 0.75rem; }
+.h-10 { height: 2.5rem; }
+.text-sm { font-size: 0.875rem; }
+.text-xs { font-size: 0.75rem; }
+.text-gray-200 { color: rgba(255,255,255,0.85); }
+.text-gray-300 { color: rgba(255,255,255,0.7); }
+.text-jarvisCyan { color: #00d4ff; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.relative { position: relative; }
+.absolute { position: absolute; }
+.inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
+.opacity-20 { opacity: 0.2; }
+.-z-10 { z-index: -10; }
+.backdrop-blur-sm { backdrop-filter: blur(4px); }
+.text-right { text-align: right; }
+
