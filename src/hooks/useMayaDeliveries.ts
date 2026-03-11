@@ -77,5 +77,19 @@ export function useMayaDeliveries() {
     return () => clearInterval(interval)
   }, [fetchDeliveries])
 
-  return { ...state, refetch: fetchDeliveries }
+  const deleteFile = useCallback(async (id: string) => {
+    if (!supabase) return false
+    const { error } = await supabase.from('jarvis_files').delete().eq('id', id)
+    if (!error) await fetchDeliveries()
+    return !error
+  }, [fetchDeliveries])
+
+  const deleteProject = useCallback(async (projectName: string) => {
+    if (!supabase) return false
+    const { error } = await supabase.from('jarvis_files').delete().eq('project_name', projectName)
+    if (!error) await fetchDeliveries()
+    return !error
+  }, [fetchDeliveries])
+
+  return { ...state, refetch: fetchDeliveries, deleteFile, deleteProject }
 }

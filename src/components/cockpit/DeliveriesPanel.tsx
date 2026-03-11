@@ -28,7 +28,7 @@ function downloadFile(file: MayaFile) {
   URL.revokeObjectURL(url)
 }
 
-function ProjectCard({ group }: { group: ProjectGroup }) {
+function ProjectCard({ group, onDelete }: { group: ProjectGroup; onDelete: () => void }) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -62,6 +62,17 @@ function ProjectCard({ group }: { group: ProjectGroup }) {
           >
             ⬇ ZIP
           </button>
+          <button
+            onClick={e => { e.stopPropagation(); onDelete() }}
+            title="Excluir projeto"
+            style={{
+              fontSize: 10, padding: '3px 8px', borderRadius: 4,
+              background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.4)',
+              color: '#ef4444', cursor: 'pointer', fontWeight: 600,
+            }}
+          >
+            🗑
+          </button>
           <span style={{ color: '#64748b', fontSize: 12 }}>{open ? '▲' : '▼'}</span>
         </div>
       </div>
@@ -92,7 +103,7 @@ function ProjectCard({ group }: { group: ProjectGroup }) {
   )
 }
 
-function LooseFileCard({ file }: { file: MayaFile }) {
+function LooseFileCard({ file, onDelete }: { file: MayaFile; onDelete: () => void }) {
   return (
     <div style={{
       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -108,22 +119,35 @@ function LooseFileCard({ file }: { file: MayaFile }) {
           {new Date(file.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
         </div>
       </div>
-      <button
-        onClick={() => downloadFile(file)}
-        style={{
-          fontSize: 9, padding: '3px 8px', borderRadius: 4,
-          background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.35)',
-          color: '#a78bfa', cursor: 'pointer', fontWeight: 600,
-        }}
-      >
-        ⬇
-      </button>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button
+          onClick={() => downloadFile(file)}
+          style={{
+            fontSize: 9, padding: '3px 8px', borderRadius: 4,
+            background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.35)',
+            color: '#a78bfa', cursor: 'pointer', fontWeight: 600,
+          }}
+        >
+          ⬇
+        </button>
+        <button
+          onClick={onDelete}
+          title="Excluir arquivo"
+          style={{
+            fontSize: 9, padding: '3px 8px', borderRadius: 4,
+            background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.4)',
+            color: '#ef4444', cursor: 'pointer', fontWeight: 600,
+          }}
+        >
+          🗑
+        </button>
+      </div>
     </div>
   )
 }
 
 export default function DeliveriesPanel() {
-  const { projects, looseFiles, loading } = useMayaDeliveries()
+  const { projects, looseFiles, loading, deleteFile, deleteProject } = useMayaDeliveries()
   const isEmpty = projects.length === 0 && looseFiles.length === 0
 
   return (
@@ -139,8 +163,8 @@ export default function DeliveriesPanel() {
           Peça ao MAYA para criar arquivos ou projetos.
         </div>
       )}
-      {projects.map(g => <ProjectCard key={g.project_name} group={g} />)}
-      {looseFiles.map(f => <LooseFileCard key={f.id} file={f} />)}
+      {projects.map(g => <ProjectCard key={g.project_name} group={g} onDelete={() => deleteProject(g.project_name)} />)}
+      {looseFiles.map(f => <LooseFileCard key={f.id} file={f} onDelete={() => deleteFile(f.id)} />)}
     </div>
   )
 }
