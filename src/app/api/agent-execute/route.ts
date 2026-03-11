@@ -118,7 +118,7 @@ export async function POST(req: Request) {
           const res = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-            body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 800, system: systemPrompt, messages: [{ role: 'user', content: task }] }),
+            body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 4096, system: systemPrompt, messages: [{ role: 'user', content: task }] }),
           })
           const j = await res.json().catch(() => null)
           const text: string | undefined = j?.content?.[0]?.text
@@ -138,7 +138,7 @@ export async function POST(req: Request) {
           const res = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
-            body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: task }], max_tokens: 800 }),
+            body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: task }], max_tokens: 4096 }),
           })
           const j = await res.json().catch(() => null)
           const text: string | undefined = j?.choices?.[0]?.message?.content

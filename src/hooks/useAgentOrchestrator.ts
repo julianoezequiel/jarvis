@@ -58,8 +58,20 @@ export function useAgentOrchestrator() {
 
       // Injeta resultado no chat via evento global
       try {
-        window.dispatchEvent(new CustomEvent('jarvis:agent-result', { detail: { agent, text } }))
+        window.dispatchEvent(new CustomEvent('jarvis:agent-result', { detail: { agent, task, text } }))
       } catch (_) {}
+
+      // Salva resultado como arquivo na aba DOCS (fire-and-forget)
+      const slug = task.slice(0, 50).toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+      const ext = (agent === '@developer' || agent === '@automacao-tecnica') ? 'md' : 'md'
+      fetch('/api/jarvis-memory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tool: 'write_file',
+          payload: { path: `${agent.replace('@', '')}-${slug}.${ext}`, content: text },
+        }),
+      }).catch(() => {})
 
       // Persiste em agent_knowledge (fire-and-forget)
       fetch('/api/jarvis-memory', {

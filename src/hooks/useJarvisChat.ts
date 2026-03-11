@@ -223,12 +223,14 @@ export function useJarvisChat() {
   // Ouvir resultados dos agentes e injetar como mensagens do sistema no chat
   useEffect(() => {
     const handler = (e: Event) => {
-      const { agent, text } = (e as CustomEvent<{ agent: string; text: string }>).detail || {}
+      const { agent, task, text } = (e as CustomEvent<{ agent: string; task?: string; text: string }>).detail || {}
       if (!agent || !text) return
-      const preview = text.length > 120 ? text.slice(0, 120) + '…' : text
+      const preview = text.length > 200 ? text.slice(0, 200) + '…' : text
+      const taskLabel = task ? ` — ${task.slice(0, 60)}` : ''
+      const msg = `✅ **${agent}**${taskLabel}\n\nEntrega disponível na aba **DOCS** para download.\n\n${preview}`
       setMessages(prev => [
         ...prev,
-        { id: `agent-${agent}-${Date.now()}`, role: 'system', text: `**${agent}:** ${preview}` },
+        { id: `agent-${agent}-${Date.now()}`, role: 'system', text: msg },
       ])
     }
     window.addEventListener('jarvis:agent-result', handler)
