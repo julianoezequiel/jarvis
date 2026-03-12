@@ -43,7 +43,7 @@ interface LerpState {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function hexToRgb(hex: string): [number, number, number] {
+export function hexToRgb(hex: string): [number, number, number] {
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
   return m
     ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)]
@@ -52,7 +52,7 @@ function hexToRgb(hex: string): [number, number, number] {
 
 // ─── State machine ────────────────────────────────────────────────────────────
 
-function resolveTarget(
+export function resolveTarget(
   status: string,
   idleRgb: [number, number, number],
 ): LerpState {

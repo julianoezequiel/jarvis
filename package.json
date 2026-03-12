@@ -10,6 +10,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "next lint",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,css}\""
   },
@@ -27,12 +29,18 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^14.3.1",
     "@types/node": "^20.5.1",
     "@types/pg": "^8.18.0",
     "@types/react": "^18.2.21",
+    "@vitejs/plugin-react": "^4.7.0",
     "eslint": "^8.45.0",
     "eslint-config-next": "^14.0.0",
+    "jsdom": "^25.0.1",
     "prettier": "^2.8.8",
-    "typescript": "^5.2.2"
+    "typescript": "^5.2.2",
+    "vite": "^5.4.21",
+    "vitest": "^2.1.9"
   }
 }

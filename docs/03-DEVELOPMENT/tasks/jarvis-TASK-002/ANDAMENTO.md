@@ -3,7 +3,7 @@
 **Task:** JARVIS-TASK-002  
 **Branch:** `feature/jarvis-TASK-002`  
 **Início:** 12/03/2026  
-**Última atualização:** 13/03/2026  
+**Última atualização:** 14/03/2026  
 
 ---
 
@@ -12,7 +12,7 @@
 | Fase | Descrição | Status |
 |---|---|---|
 | 1 | Abstração de Banco de Dados (`src/lib/db/`) | ✅ Concluído |
-| 2 | Widget Core (Orb + Sidebar + Maximizado) | ⏳ Não iniciado |
+| 2 | Widget Core (Orb + Sidebar + Maximizado) | ✅ Concluído |
 | 3 | SettingsModal com 4 abas | ⏳ Não iniciado |
 | 4 | Enrollment Externo via evento | ⏳ Não iniciado |
 | 5 | Embed Script (script tag + iframe) | ⏳ Não iniciado |
@@ -82,6 +82,36 @@
 - ✅ ANDAMENTO.md criada
 - ⏳ Branch `feature/jarvis-TASK-002` a criar na próxima sessão de implementação
 
+### 14/03/2026 — Fase 2 concluída + Testes
+
+#### Fase 2 — Widget Core
+
+- ✅ `src/components/widget/orbs/types.ts` — `OrbType`, `OrbConfig`, `OrbTheme`, `OrbComponentProps`, `DEFAULT_ORB_CONFIG`
+- ✅ `src/components/widget/orbs/DefaultOrb.tsx` — canvas 2D (esfera 3D + anéis orbitais + atmosphere glow + lerp state machine)
+- ✅ `src/components/widget/orbs/OrbRenderer.tsx` — dispatcher por `OrbType` (extensível via `switch`)
+- ✅ `src/components/widget/MayaOrb.tsx` — orbe draggable (4px threshold click vs drag, viewport clamp, ARIA, keyboard)
+- ✅ `src/components/widget/MayaSidebar.tsx` — painel 380px slide-in, 100% inline styles (CSS isolation)
+- ✅ `src/components/widget/MayaWidget.tsx` — raiz pública, compõe Orb + Sidebar, gerencia `isOpen`
+- ✅ Commit `c021062`: `feat: Fase 2 - MayaWidget core + configurable orb system (Refs: TASK-002)`
+
+#### Infraestrutura de Testes
+
+- ✅ Vitest 2.x + Vite 5.x instalados (compatível com Node 18)
+- ✅ `vitest.config.mts` criado (`.mts` = ESM, necessário com Vite 5+)
+- ✅ `src/__tests__/setup.ts` — mocks globais: `document.fonts`, canvas 2D API, `requestAnimationFrame`
+- ✅ Scripts adicionados ao `package.json`: `"test": "vitest run"`, `"test:watch": "vitest"`
+- ✅ `hexToRgb` e `resolveTarget` exportados de `DefaultOrb.tsx` para testes
+- ✅ `src/lib/db/__tests__/adapter.test.ts` — Fase 1: factory, adapter supabase padrão, shape do config
+- ✅ `src/components/widget/orbs/__tests__/DefaultOrb.pure.test.ts` — Fase 2 pura: hexToRgb (5 casos) + resolveTarget (14 casos)
+- ✅ `src/components/widget/__tests__/MayaWidget.test.tsx` — Fase 2 componente: OrbRenderer (3) + MayaWidget toggle (8)
+- ✅ **34/34 testes passando** (`npx vitest run`)
+
+#### Decisões Técnicas
+
+- Vitest 4 + Vite 7 requerem Node 20+; downgrade para Vitest 2 + Vite 5 (compatível com Node 18 do projeto)
+- `requestAnimationFrame` mockado como no-op — evita animation loop durante testes
+- Canvas 2D API mockada globalmente via `setup.ts`
+
 ---
 
 ## Padrões de Desenvolvimento (Projeto Oficial)
@@ -107,12 +137,9 @@ Este projeto segue metodologias de desenvolvimento profissional. Toda implementa
 
 ## Próximo Passo
 
-**Fase 2 — Widget Core (Orb + Sidebar + Maximizado)**
+**Fase 3 — ChatPanel integrado no MayaSidebar**
 
-Componentes a criar:
-1. `src/components/widget/MayaWidget.tsx` — raiz do widget (overlay fixed)
-2. `src/components/widget/MayaOrb.tsx` — orbe draggable com reação a áudio
-3. `src/components/widget/MayaSidebar.tsx` — painel lateral 380px (chat + histórico)
-4. `src/components/widget/MayaMaximized.tsx` — view expandida (cockpit simplificado)
-
-Pontos de atenção: CSS isolation (Shadow DOM ou CSS modules), mobile-first, zero dependência do host.
+- Substituir o body placeholder da `MayaSidebar` pelo `ChatPanel` funcional
+- Conectar ao endpoint `/api/maya-chat` via SSE
+- Lista de mensagens + input + botão enviar
+- Gerenciamento de `sessionId`
