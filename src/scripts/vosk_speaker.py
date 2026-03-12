@@ -107,7 +107,7 @@ def cmd_extract(wav_path: str):
     except Exception as e:
         print(json.dumps({"error": str(e)}))
 
-def cmd_compare(wav_path: str, profiles_json: str):
+def cmd_compare(wav_path: str, profiles_json: str, threshold: float = 0.85):
     try:
         profiles = json.loads(profiles_json)
         if not profiles:
@@ -130,7 +130,7 @@ def cmd_compare(wav_path: str, profiles_json: str):
                 best_conf = sim
                 best_name = p.get("name", "")
 
-        match = best_conf >= THRESHOLD
+        match = best_conf >= threshold
         print(json.dumps({
             "match": match,
             "speaker": best_name if match else None,
@@ -152,7 +152,8 @@ if __name__ == "__main__":
         cmd_extract(wav_path)
     elif command == "compare":
         profiles_json = sys.argv[3] if len(sys.argv) > 3 else "[]"
-        cmd_compare(wav_path, profiles_json)
+        threshold = float(sys.argv[4]) if len(sys.argv) > 4 else 0.85
+        cmd_compare(wav_path, profiles_json, threshold)
     else:
         print(json.dumps({"error": f"unknown command: {command}"}))
         sys.exit(1)

@@ -658,10 +658,12 @@ export function useMayaChat() {
         const runVerify = async () => {
           let speakerPrefix = ''
           try {
+            const rawThreshold = localStorage.getItem('maya_verify_threshold')
+            const threshold = rawThreshold ? parseFloat(rawThreshold) : 0.85
             const res = await fetch('/api/speaker-verify', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ audioB64 }),
+              body: JSON.stringify({ audioB64, threshold }),
             })
             const result = await res.json()
             if (result.reason !== 'no_enrollment') {

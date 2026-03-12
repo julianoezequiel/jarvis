@@ -15,14 +15,18 @@ import { supabase } from '../../../lib/supabase'
 const CATEGORY = 'voice_profile'
 
 export async function POST(req: NextRequest) {
-  let body: { audioB64?: string }
+  let body: { audioB64?: string; threshold?: number }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const { audioB64 } = body
+  const { audioB64, threshold } = body
+  const safeThreshold = typeof threshold === 'number' && threshold >= 0.5 && threshold <= 1.0
+    ? threshold
+    : 0.85
+
   if (!audioB64 || typeof audioB64 !== 'string') {
     return NextResponse.json({ error: 'audioB64 is required' }, { status: 400 })
   }
@@ -53,6 +57,6 @@ export async function POST(req: NextRequest) {
     })
     .filter((p): p is VoiceProfile => p !== null)
 
-  const result = await verifyAgainstProfiles(audioB64, profiles)
+  const result = await verifyAgainstProfiles(audioB64, profiles, safeThreshold)
   return NextResponse.json(result)
 }

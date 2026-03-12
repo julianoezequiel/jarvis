@@ -50,6 +50,7 @@ export default function SettingsPanel() {
   const [profilesLoading, setProfilesLoading] = useState(false)
   const [verifyEnabled, setVerifyEnabled] = useState(false)
   const [deletingProfile, setDeletingProfile] = useState<string | null>(null)
+  const [verifyThreshold, setVerifyThreshold] = useState(0.85)
 
   const loadProfiles = useCallback(async () => {
     setProfilesLoading(true)
@@ -82,8 +83,18 @@ export default function SettingsPanel() {
     localStorage.setItem('maya_speaker_verify_enabled', enabled ? 'true' : 'false')
   }
 
+  const handleThresholdChange = (value: number) => {
+    setVerifyThreshold(value)
+    localStorage.setItem('maya_verify_threshold', String(value))
+  }
+
   const handleOpenEnrollModal = () => {
     window.dispatchEvent(new CustomEvent('maya:enroll-intent', { detail: { suggestedName: '' } }))
+    window.dispatchEvent(new CustomEvent('closeSettingsModal'))
+  }
+
+  const handleUpdateProfile = (name: string) => {
+    window.dispatchEvent(new CustomEvent('maya:enroll-intent', { detail: { suggestedName: name } }))
     window.dispatchEvent(new CustomEvent('closeSettingsModal'))
   }
 
@@ -103,8 +114,10 @@ export default function SettingsPanel() {
     } catch (e) {
       // ignore
     }
-    // Load voice verify flag + profiles
+    // Load voice verify flag + threshold + profiles
     setVerifyEnabled(localStorage.getItem('maya_speaker_verify_enabled') === 'true')
+    const storedThreshold = localStorage.getItem('maya_verify_threshold')
+    if (storedThreshold) setVerifyThreshold(parseFloat(storedThreshold))
     void loadProfiles()
   }, [])
 
@@ -370,6 +383,32 @@ export default function SettingsPanel() {
             </button>
           </div>
 
+          {/* Threshold slider */}
+          {verifyEnabled && profiles.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', color: 'rgba(0,212,255,0.6)' }}>Sensibilidade do reconhecimento</span>
+                <span style={{ fontSize: '11px', fontFamily: 'Share Tech Mono, monospace', color: '#00d4ff' }}>
+                  {verifyThreshold === 0.95 ? 'Muito alto' :
+                   verifyThreshold >= 0.85 ? 'Alto' :
+                   verifyThreshold >= 0.75 ? 'Médio' : 'Baixo'}
+                  {' '}({verifyThreshold.toFixed(2)})
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0.60} max={0.95} step={0.05}
+                value={verifyThreshold}
+                onChange={e => handleThresholdChange(parseFloat(e.target.value))}
+                style={{ width: '100%', accentColor: '#00d4ff', cursor: 'pointer' }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '9px', color: 'rgba(0,212,255,0.35)' }}>← Mais permissivo</span>
+                <span style={{ fontSize: '9px', color: 'rgba(0,212,255,0.35)' }}>Mais restrito →</span>
+              </div>
+            </div>
+          )}
+
           {/* Toggle verification */}
           <label style={{ ...checkboxRowStyle, alignItems: 'flex-start', gap: 10 }}>
             <input
@@ -411,6 +450,16 @@ export default function SettingsPanel() {
                   <span style={{ fontSize: '9px', color: 'rgba(0,212,255,0.4)' }}>
                     {new Date(p.enrolledAt).toLocaleDateString('pt-BR')}
                   </span>
+                  <button
+                    onClick={() => handleUpdateProfile(p.name)}
+                    title={`Regravar voz de "${p.name}"`}
+                    style={{
+                      background: 'none', border: 'none', color: 'rgba(0,212,255,0.6)',
+                      cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: '0 2px',
+                    }}
+                  >
+                    ↺
+                  </button>
                   <button
                     onClick={() => handleDeleteProfile(p.name)}
                     disabled={deletingProfile === p.name}

@@ -68,6 +68,7 @@ export async function extractEmbedding(audioB64: string): Promise<number[] | nul
 export async function verifyAgainstProfiles(
   audioB64: string,
   profiles: VoiceProfile[],
+  threshold = 0.85,
 ): Promise<VerifyResult> {
   // No enrolled profiles → open access (no restriction mode)
   if (!profiles.length) {
@@ -79,7 +80,7 @@ export async function verifyAgainstProfiles(
     const profilesJson = JSON.stringify(profiles)
     const { stdout } = await execFileAsync(
       PYTHON,
-      [SCRIPT, 'compare', wavPath, profilesJson],
+      [SCRIPT, 'compare', wavPath, profilesJson, String(threshold)],
       {
         timeout: 30_000,
         maxBuffer: 1024 * 512,
