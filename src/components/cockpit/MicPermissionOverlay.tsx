@@ -503,16 +503,32 @@ function setupEnrollControl() {
     console.log('[maya:mic] enroll-end — enrollment modal closed')
   })
   // maya:enroll-capture-start — user clicked Record: begin capturing into enrollment buffer
+  // Also stops SpeechRecognition so Maya doesn't respond to the sample text being read aloud.
+  // Hardware track stays ON so the AudioContext/ScriptProcessor keeps filling the enrollment buffer.
   window.addEventListener('maya:enroll-capture-start', () => {
     _enrollCapturing = true
     _enrollPCM = []
-    console.log('[maya:mic] enrollment capture started')
+    // Stop recognition without muting hardware (AudioContext needs the live stream)
+    _recStopped = true
+    try { _rec?.stop() } catch (_) {}
+    // Discard any pending interim text
+    _pendingFinalText = ''
+    _lastInterimText = ''
+    if (_finalTimer) { clearTimeout(_finalTimer); _finalTimer = null }
+    if (_commitTimer) { clearTimeout(_commitTimer); _commitTimer = null }
+    console.log('[maya:mic] enrollment capture started — recognition paused')
   })
-  // maya:enroll-capture-stop — timer finished: stop capture (buffer preserved for retrieval)
+  // maya:enroll-capture-stop — timer finished: stop capture + restart recognition
   window.addEventListener('maya:enroll-capture-stop', () => {
     _enrollCapturing = false
     const totalSecs = (_enrollPCM.reduce((s, c) => s + c.length, 0) / RING_RATE).toFixed(1)
     console.log(`[maya:mic] enrollment capture stopped — ${_enrollPCM.length} chunks (~${totalSecs}s)`)
+    // Restart recognition after a short delay (let audio settle)
+    setTimeout(() => {
+      _recStopped = false
+      startRecognition()
+      console.log('[maya:mic] recognition restarted after enrollment')
+    }, 800)
   })
 }
 
