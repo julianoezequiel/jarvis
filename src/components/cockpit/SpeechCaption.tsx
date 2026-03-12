@@ -10,7 +10,9 @@ export default function SpeechCaption() {
   const [isFinal, setIsFinal] = useState(false)
   const [isDenied, setIsDenied] = useState(false)
   const [isWakeListening, setIsWakeListening] = useState(false)
+  const [wakeSecondsLeft, setWakeSecondsLeft] = useState(0)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wakeCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     const clearHide = () => {
@@ -72,17 +74,33 @@ export default function SpeechCaption() {
       }, 3500)
     }
 
-    const onWakeActivated = () => {
+    const onWakeActivated = (ev: Event) => {
+      const timeoutMs: number = (ev as CustomEvent)?.detail?.timeoutMs ?? 12000
       clearHide()
       setText('')
       setVisible(false)
       setIsFinal(false)
       setIsDenied(false)
       setIsWakeListening(true)
+      // Inicia contagem regressiva
+      const totalSec = Math.round(timeoutMs / 1000)
+      setWakeSecondsLeft(totalSec)
+      if (wakeCountdownRef.current) clearInterval(wakeCountdownRef.current)
+      wakeCountdownRef.current = setInterval(() => {
+        setWakeSecondsLeft(prev => {
+          if (prev <= 1) {
+            if (wakeCountdownRef.current) { clearInterval(wakeCountdownRef.current); wakeCountdownRef.current = null }
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
     }
 
     const onWakeDeactivated = () => {
       setIsWakeListening(false)
+      setWakeSecondsLeft(0)
+      if (wakeCountdownRef.current) { clearInterval(wakeCountdownRef.current); wakeCountdownRef.current = null }
       // Se não há texto exibido, esconde tudo
       hideTimer.current = setTimeout(() => {
         setVisible(false)
@@ -101,6 +119,7 @@ export default function SpeechCaption() {
       window.removeEventListener('maya:speech-denied', onDenied)
       window.removeEventListener('maya:wake-activated', onWakeActivated)
       window.removeEventListener('maya:wake-deactivated', onWakeDeactivated)
+      if (wakeCountdownRef.current) clearInterval(wakeCountdownRef.current)
       clearHide()
     }
   }, [])
@@ -137,6 +156,11 @@ export default function SpeechCaption() {
           <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', color: isDenied ? 'rgba(255,68,68,0.9)' : isWakeListening ? 'rgba(0,212,255,1)' : isFinal ? 'rgba(0,255,136,0.7)' : 'rgba(0,212,255,0.7)', textTransform: 'uppercase', fontFamily: 'Orbitron, monospace' }}>
             {isDenied ? 'ACESSO NEGADO' : isWakeListening ? 'MAYA — OUVINDO...' : isFinal ? 'RECEBIDO' : 'ESCUTANDO'}
           </span>
+          {isWakeListening && wakeSecondsLeft > 0 && (
+            <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'rgba(0,212,255,0.5)', fontFamily: 'Orbitron, monospace' }}>
+              {wakeSecondsLeft}s
+            </span>
+          )}
         </div>
 
         {/* Text — hidden during wake standby; shows command text once user speaks */}

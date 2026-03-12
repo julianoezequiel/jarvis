@@ -90,25 +90,33 @@ let _userMuted = false // mute state set by user (CentralOrb click) — persists
 // ─── Wake word gate ─────────────────────────────────────────────────────────
 // Default ON. OFF = ouve tudo (modo widget embutido).
 // Toggle via localStorage 'maya_wake_word_enabled' = 'true'|'false'
-let _wakeActive = false    // true: "maya" foi dito, aguardando comando (janela de 12s)
+let _wakeActive = false    // true: aguardando comando na janela de conversa
 let _wakeTimer: ReturnType<typeof setTimeout> | null = null
-const WAKE_TIMEOUT_MS = 12000
+const WAKE_INITIAL_MS = 12000  // janela inicial (só ouviu "maya", sem comando ainda)
 
 function isWakeWordEnabled(): boolean {
   try { return localStorage.getItem('maya_wake_word_enabled') !== 'false' } catch { return true }
 }
 
-function activateWakeWord() {
+// Tempo de conversa após o primeiro comando: configuravel em segundos (default 60s)
+function getConversationTimeoutMs(): number {
+  try {
+    const v = localStorage.getItem('maya_conversation_timeout_sec')
+    return v ? Math.max(5, parseFloat(v)) * 1000 : 60000
+  } catch { return 60000 }
+}
+
+function activateWakeWord(timeoutMs = WAKE_INITIAL_MS) {
   if (_wakeTimer) clearTimeout(_wakeTimer)
   _wakeActive = true
-  window.dispatchEvent(new CustomEvent('maya:wake-activated'))
-  console.log('[maya:mic] WAKE — aguardando comando')
+  window.dispatchEvent(new CustomEvent('maya:wake-activated', { detail: { timeoutMs } }))
+  console.log(`[maya:mic] WAKE ativo — janela de ${timeoutMs / 1000}s`)
   _wakeTimer = setTimeout(() => {
     _wakeActive = false
     _wakeTimer = null
     window.dispatchEvent(new CustomEvent('maya:wake-deactivated'))
-    console.log('[maya:mic] wake word timeout — voltando ao standby')
-  }, WAKE_TIMEOUT_MS)
+    console.log('[maya:mic] wake timeout — voltando ao standby')
+  }, timeoutMs)
 }
 
 function deactivateWakeWord() {
@@ -131,7 +139,8 @@ function dispatchSpeech(text: string) {
   if (_wakeActive) {
     // Wake word já detectada — este é o comando
     window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text, audioB64: _getLastAudioB64(5) } }))
-    deactivateWakeWord()
+    // Reativa com o timeout de conversa — usuário pode falar de novo sem dizer "Maya"
+    activateWakeWord(getConversationTimeoutMs())
     return
   }
   // Modo standby: só processa se contiver "maya" / "maia" e variações
@@ -139,9 +148,10 @@ function dispatchSpeech(text: string) {
     const command = text.replace(WAKE_STRIP_REGEX, '').trim()
     if (command.length > 2) {
       // "maya, qual o tempo?" — wake word + comando na mesma frase
-      activateWakeWord()
+      activateWakeWord(getConversationTimeoutMs())
       window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text: command, audioB64: _getLastAudioB64(5) } }))
-      deactivateWakeWord()
+      // Mantém wake ativo com timeout de conversa (usuário já enviou um comando)
+      activateWakeWord(getConversationTimeoutMs())
       console.log(`[maya:mic] wake+comando na mesma frase: "${command}"`)
     } else {
       // Só "maya" — ativa e aguarda a próxima frase

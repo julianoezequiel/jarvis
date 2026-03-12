@@ -50,6 +50,7 @@ export default function SettingsPanel() {
   const [profilesLoading, setProfilesLoading] = useState(false)
   const [verifyEnabled, setVerifyEnabled] = useState(false)
   const [wakeWordEnabled, setWakeWordEnabled] = useState(true)
+  const [conversationTimeout, setConversationTimeout] = useState(60)
   const [deletingProfile, setDeletingProfile] = useState<string | null>(null)
   const [verifyThreshold, setVerifyThreshold] = useState(0.85)
 
@@ -89,6 +90,11 @@ export default function SettingsPanel() {
     localStorage.setItem('maya_wake_word_enabled', enabled ? 'true' : 'false')
   }
 
+  const handleConversationTimeout = (sec: number) => {
+    setConversationTimeout(sec)
+    localStorage.setItem('maya_conversation_timeout_sec', String(sec))
+  }
+
   const handleThresholdChange = (value: number) => {
     setVerifyThreshold(value)
     localStorage.setItem('maya_verify_threshold', String(value))
@@ -123,6 +129,8 @@ export default function SettingsPanel() {
     // Load voice verify flag + threshold + profiles
     setVerifyEnabled(localStorage.getItem('maya_speaker_verify_enabled') === 'true')
     setWakeWordEnabled(localStorage.getItem('maya_wake_word_enabled') !== 'false')
+    const storedConvTimeout = localStorage.getItem('maya_conversation_timeout_sec')
+    if (storedConvTimeout) setConversationTimeout(parseInt(storedConvTimeout, 10))
     const storedThreshold = localStorage.getItem('maya_verify_threshold')
     if (storedThreshold) setVerifyThreshold(parseFloat(storedThreshold))
     void loadProfiles()
@@ -458,6 +466,32 @@ export default function SettingsPanel() {
               </span>
             </span>
           </label>
+
+          {/* Conversation timeout slider */}
+          {wakeWordEnabled && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={{ fontSize: '11px', color: '#00d4ff', fontWeight: 600 }}>Tempo de conversa após ativar</label>
+                <span style={{ fontSize: '12px', color: '#00ff88', fontFamily: 'Orbitron, monospace', fontWeight: 700 }}>
+                  {conversationTimeout}s
+                </span>
+              </div>
+              <input
+                type="range"
+                min={10}
+                max={300}
+                step={10}
+                value={conversationTimeout}
+                onChange={e => handleConversationTimeout(Number(e.target.value))}
+                style={{ width: '100%', accentColor: '#00d4ff' }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '9px', color: 'rgba(0,212,255,0.35)' }}>10s</span>
+                <span style={{ fontSize: '9px', color: 'rgba(0,212,255,0.35)' }}>Maya fica ativa ouvindo após cada resposta</span>
+                <span style={{ fontSize: '9px', color: 'rgba(0,212,255,0.35)' }}>5min</span>
+              </div>
+            </div>
+          )}
 
           {/* Profile list */}
           {profilesLoading ? (
