@@ -21,7 +21,7 @@ const RECORD_SECS = 35
  *  O sistema extrai automaticamente 6 embeddings de 5s cada.
  *  Não contém a wake word (Maya/Maia). */
 const SAMPLE_TEXT =
-  'Sistema AIOS, iniciando protocolo de verificação de identidade vocal. Confirmo que sou o operador autorizado deste sistema de inteligência artificial. Esta tecnologia registra minha voz para garantir que apenas usuários autorizados possam acessar os recursos do assistente. Reconheço minha responsabilidade pelo uso ético e seguro de todas as funcionalidades disponíveis. Autorização biométrica registrada com sucesso. Sistema pronto para operação.'
+  'Sistema MAYA, iniciando protocolo de verificação de identidade vocal. Confirmo que sou o operador autorizado deste sistema de inteligência artificial. Esta tecnologia registra minha voz para garantir que apenas usuários autorizados possam acessar os recursos do assistente. Reconheço minha responsabilidade pelo uso ético e seguro de todas as funcionalidades disponíveis. Autorização biométrica registrada com sucesso. Sistema pronto para operação.'
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
