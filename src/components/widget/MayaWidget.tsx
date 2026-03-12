@@ -28,6 +28,7 @@ import React, { useState, useEffect } from 'react'
 import MayaOrb, { type WidgetPosition } from './MayaOrb'
 import MayaSidebar, { type SidebarSide } from './MayaSidebar'
 import WidgetSettingsModal from './WidgetSettingsModal'
+import WidgetEnrollModal from './WidgetEnrollModal'
 import type { OrbConfig } from './orbs/types'
 import { DEFAULT_ORB_CONFIG } from './orbs/types'
 
@@ -67,14 +68,43 @@ function resolveOrbConfig(partial?: Partial<OrbConfig>): OrbConfig {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function MayaWidget({ config }: MayaWidgetProps) {
-  const [isOpen, setIsOpen]           = useState(false)
+  const [isOpen, setIsOpen]               = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [sideOverride, setSideOverride]     = useState<SidebarSide | null>(null)
+
+  // Phase 4 — external enrollment events
+  const [isEnrollOpen, setIsEnrollOpen]   = useState(false)
+  const [enrollName, setEnrollName]       = useState('')
+  const [enrollUserId, setEnrollUserId]   = useState<string | undefined>(undefined)
 
   // Pick up persisted position on first mount (client-only)
   useEffect(() => {
     const stored = localStorage.getItem('maya_widget_position')
     if (stored === 'left' || stored === 'right') setSideOverride(stored)
+  }, [])
+
+  // Listen to enrollment events: internal (enroll-intent) and external host API (enroll-voice)
+  useEffect(() => {
+    function onEnrollIntent(e: Event) {
+      const detail = (e as CustomEvent<{ suggestedName?: string }>).detail
+      setEnrollName(detail?.suggestedName ?? '')
+      setEnrollUserId(undefined)
+      setIsOpen(true)
+      setIsEnrollOpen(true)
+    }
+    function onEnrollVoice(e: Event) {
+      const detail = (e as CustomEvent<{ name?: string; userId?: string }>).detail
+      setEnrollName(detail?.name ?? '')
+      setEnrollUserId(detail?.userId)
+      setIsOpen(true)
+      setIsEnrollOpen(true)
+    }
+    window.addEventListener('maya:enroll-intent', onEnrollIntent)
+    window.addEventListener('maya:enroll-voice',  onEnrollVoice)
+    return () => {
+      window.removeEventListener('maya:enroll-intent', onEnrollIntent)
+      window.removeEventListener('maya:enroll-voice',  onEnrollVoice)
+    }
   }, [])
 
   const position = config?.position ?? DEFAULTS.position
@@ -105,6 +135,14 @@ export default function MayaWidget({ config }: MayaWidgetProps) {
         onClose={() => setIsSettingsOpen(false)}
         accentColor={accentColor}
         onPositionChange={s => setSideOverride(s)}
+      />
+      <WidgetEnrollModal
+        isOpen={isEnrollOpen}
+        onClose={() => setIsEnrollOpen(false)}
+        suggestedName={enrollName}
+        userId={enrollUserId}
+        accentColor={accentColor}
+        onEnrolled={() => setIsEnrollOpen(false)}
       />
     </>
   )

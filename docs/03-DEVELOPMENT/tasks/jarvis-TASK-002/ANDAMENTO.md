@@ -3,7 +3,7 @@
 **Task:** JARVIS-TASK-002  
 **Branch:** `feature/jarvis-TASK-002`  
 **Início:** 12/03/2026  
-**Última atualização:** 14/03/2026  
+**Última atualização:** 12/03/2026 (sessão 3)  
 
 ---
 
@@ -13,7 +13,7 @@
 |---|---|---|
 | 1 | Abstração de Banco de Dados (`src/lib/db/`) | ✅ Concluído |
 | 2 | Widget Core (Orb + Sidebar + Maximizado) | ✅ Concluído |
-| 3 | SettingsModal com 4 abas | ⏳ Não iniciado |
+| 3 | SettingsModal com 4 abas | ✅ Concluído |
 | 4 | Enrollment Externo via evento | ⏳ Não iniciado |
 | 5 | Embed Script (script tag + iframe) | ⏳ Não iniciado |
 | 6 | Integração PontoCore Frontend | ⏳ Não iniciado |
@@ -135,11 +135,33 @@ Este projeto segue metodologias de desenvolvimento profissional. Toda implementa
 
 ---
 
+### 12/03/2026 — Sessão 3: Fase 3 concluída
+
+#### Fase 3 — SettingsModal (4 abas)
+
+- ✅ `src/components/widget/WidgetSettingsModal.tsx` — modal 4 abas, 100% inline styles, z-index 10000
+  - **Aba Geral**: toggle posição esq/dir (persiste `localStorage.maya_widget_position`), seletor TTS+voz (edge/azure/gemini/openai/browser), toggle áudio em background, botão limpar memória
+  - **Aba Agentes**: 21 toggles individuais (ARIA `role=switch`), toggle global ativar/desativar todos, persiste `localStorage.maya_agents_config`
+  - **Aba Conhecimento**: drag-drop zone + `input[file]`, upload TXT/MD/PDF/DOCX ≤10MB via `FileReader.readAsText`, lista com chunk count + delete
+  - **Aba Vozes**: CRUD de perfis via `/api/speaker-enroll`, enrolamento via `maya:enroll-intent` event, verificação toggle + threshold slider (0.60–0.95)
+- ✅ `src/app/api/knowledge/route.ts` — `GET/POST/DELETE` para base de conhecimento
+  - Chunking: 600 chars com overlap 80, armazenado em `agent_knowledge` (agent_id='knowledge')
+  - Metadata row: `skill_name='META::{fileId}'`; chunks: `skill_name='{fileId}::{i}'`
+  - DELETE usa `db.delete` com filtro `skill_name LIKE '%{fileId}%'`
+- ✅ `src/components/widget/MayaSidebar.tsx` — prop `onSettingsOpen?: () => void` + botão ⚙ no header
+- ✅ `src/components/widget/MayaWidget.tsx` — `isSettingsOpen` state + `sideOverride` state (posição persistida), render `<WidgetSettingsModal>`
+- ✅ `src/components/widget/__tests__/WidgetSettingsModal.test.tsx` — 22 testes
+- ✅ **84/84 testes passando** (`npx vitest run`)
+- ✅ `npx tsc --noEmit` — zero erros
+- ✅ Commit `7b36914`: `feat: Fase 3 - SettingsModal com 4 abas (Geral, Agentes, Conhecimento, Vozes) (Refs: TASK-002)`
+
+---
+
 ## Próximo Passo
 
-**Fase 3 — ChatPanel integrado no MayaSidebar**
+**Fase 4 — Enrollment Externo via evento**
 
-- Substituir o body placeholder da `MayaSidebar` pelo `ChatPanel` funcional
-- Conectar ao endpoint `/api/maya-chat` via SSE
-- Lista de mensagens + input + botão enviar
-- Gerenciamento de `sessionId`
+- Expor API de enrollment para sistemas host via `postMessage` / custom event
+- Permitir que o PontoCore dispare o flow de cadastro de voz sem abrir o widget
+- Contrato: `window.dispatchEvent(new CustomEvent('maya:enroll-intent', { detail: { suggestedName } }))`
+- Revisar `VoiceEnrollModal` para usar dentro do widget (sem depender do cockpit)
