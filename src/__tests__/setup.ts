@@ -49,3 +49,6 @@ HTMLCanvasElement.prototype.getContext = vi.fn(() => {
 globalThis.requestAnimationFrame = vi.fn(() => 1) as unknown as typeof requestAnimationFrame
 globalThis.cancelAnimationFrame = vi.fn()
 
+// scrollIntoView: jsdom does not implement smooth scrolling
+Element.prototype.scrollIntoView = vi.fn()
+

@@ -12,6 +12,7 @@
  */
 
 import React from 'react'
+import WidgetChatPanel from './WidgetChatPanel'
 
 export type SidebarSide = 'right' | 'left'
 
@@ -21,6 +22,8 @@ interface MayaSidebarProps {
   onClose: () => void
   /** Optional accent color (hex) — matches the orb theme */
   accentColor?: string
+  /** Propagates chat status changes up to MayaWidget (for orb animation) */
+  onStatusChange?: (status: string) => void
 }
 
 const SIDEBAR_WIDTH = 380
@@ -31,6 +34,7 @@ export default function MayaSidebar({
   side,
   onClose,
   accentColor = '#00d4ff',
+  onStatusChange,
 }: MayaSidebarProps) {
   const translate = side === 'right'
     ? (isOpen ? 'translateX(0)' : 'translateX(100%)')
@@ -42,6 +46,7 @@ export default function MayaSidebar({
 
   return (
     <div
+      className="maya-widget-sidebar"
       role="dialog"
       aria-modal="true"
       aria-label="Maya — Assistente IA"
@@ -140,94 +145,21 @@ export default function MayaSidebar({
         </button>
       </div>
 
-      {/* ── Body — placeholder for Phase 3 chat ───────────────────────────── */}
-      <div style={{
-        flex: 1,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 16,
-        color: `${accentColor}55`,
-        fontSize: 11,
-        letterSpacing: 2,
-      }}>
-        {/* Decorative orb placeholder */}
-        <div style={{
-          width: 56,
-          height: 56,
-          border: `1px solid ${accent30}`,
-          borderRadius: '50%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: accent10,
-        }}>
-          <span style={{ fontSize: 24, lineHeight: 1, opacity: 0.6 }}>◎</span>
-        </div>
+      {/* ── Body + Footer — Phase 3 chat ──────────────────────────────────── */}
+      <WidgetChatPanel
+        accentColor={accentColor}
+        onStatusChange={onStatusChange}
+      />
 
-        <div style={{ textAlign: 'center', lineHeight: 1.8 }}>
-          <div style={{ marginBottom: 4 }}>CHAT PANEL</div>
-          <div style={{ fontSize: 9, opacity: 0.6 }}>FASE 3 — EM DESENVOLVIMENTO</div>
-        </div>
-
-        {/* Decorative scan line */}
-        <div style={{
-          width: 120,
-          height: 1,
-          background: `linear-gradient(to right, transparent, ${accentColor}33, transparent)`,
-        }} />
-      </div>
-
-      {/* ── Footer — input placeholder ────────────────────────────────────── */}
-      <div style={{
-        padding: '12px 16px',
-        borderTop: `1px solid ${accent30}`,
-        flexShrink: 0,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-      }}>
-        <div
-          aria-label="Área de input (disponível na Fase 3)"
-          style={{
-            flex: 1,
-            background: accent10,
-            border: `1px solid ${accent30}`,
-            borderRadius: 8,
-            padding: '10px 14px',
-            fontSize: 11,
-            color: 'rgba(255,255,255,0.2)',
-            letterSpacing: 0.5,
-            cursor: 'default',
-          }}
-        >
-          Mensagem... (Fase 3)
-        </div>
-
-        {/* Send button placeholder */}
-        <div style={{
-          width: 36,
-          height: 36,
-          border: `1px solid ${accent30}`,
-          borderRadius: 8,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: `${accentColor}55`,
-          fontSize: 14,
-          flexShrink: 0,
-        }}>
-          ↑
-        </div>
-      </div>
-
-      {/* Pulse animation keyframes injected once */}
+      {/* Animation keyframes + textarea placeholder colour */}
       <style>{`
         @keyframes mayaWidgetPulse {
           0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
+          50%       { opacity: 0.35; }
+        }
+        .maya-widget-sidebar textarea::placeholder {
+          color: ${accentColor}55;
+          opacity: 1;
         }
       `}</style>
     </div>

@@ -6,11 +6,25 @@
  */
 
 import React from 'react'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import OrbRenderer from '../orbs/OrbRenderer'
 import MayaWidget from '../MayaWidget'
 import { DEFAULT_ORB_CONFIG } from '../orbs/types'
+
+// useMayaChat is needed by WidgetChatPanel (rendered inside MayaSidebar)
+vi.mock('../../../hooks/useMayaChat', () => ({
+  useMayaChat: vi.fn(() => ({
+    messages: [],
+    status: 'idle',
+    listenEnabled: false,
+    setListen: vi.fn(),
+    sendMessage: vi.fn().mockResolvedValue(undefined),
+    addUserMessage: vi.fn(),
+    stopAudio: vi.fn(),
+    clear: vi.fn(),
+  })),
+}))
 
 // ─── OrbRenderer ─────────────────────────────────────────────────────────────
 
