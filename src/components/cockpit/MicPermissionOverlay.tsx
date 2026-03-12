@@ -87,6 +87,66 @@ let _micStream: MediaStream | null = null // physical mic stream — muted at ha
 let _muteResumeTimer: ReturnType<typeof setTimeout> | null = null // pending echo-guard resume
 let _userMuted = false // mute state set by user (CentralOrb click) — persists until toggled
 
+// ─── Wake word gate ─────────────────────────────────────────────────────────
+// Default ON. OFF = ouve tudo (modo widget embutido).
+// Toggle via localStorage 'maya_wake_word_enabled' = 'true'|'false'
+let _wakeActive = false    // true: "maya" foi dito, aguardando comando (janela de 12s)
+let _wakeTimer: ReturnType<typeof setTimeout> | null = null
+const WAKE_TIMEOUT_MS = 12000
+
+function isWakeWordEnabled(): boolean {
+  try { return localStorage.getItem('maya_wake_word_enabled') !== 'false' } catch { return true }
+}
+
+function activateWakeWord() {
+  if (_wakeTimer) clearTimeout(_wakeTimer)
+  _wakeActive = true
+  window.dispatchEvent(new CustomEvent('maya:wake-activated'))
+  console.log('[maya:mic] WAKE — aguardando comando')
+  _wakeTimer = setTimeout(() => {
+    _wakeActive = false
+    _wakeTimer = null
+    window.dispatchEvent(new CustomEvent('maya:wake-deactivated'))
+    console.log('[maya:mic] wake word timeout — voltando ao standby')
+  }, WAKE_TIMEOUT_MS)
+}
+
+function deactivateWakeWord() {
+  if (_wakeTimer) { clearTimeout(_wakeTimer); _wakeTimer = null }
+  _wakeActive = false
+  window.dispatchEvent(new CustomEvent('maya:wake-deactivated'))
+}
+
+// Ponto central de despacho — aplica o gate de wake word
+function dispatchSpeech(text: string) {
+  if (!isWakeWordEnabled()) {
+    // Modo sempre ativo (widget embutido, wake word desligado)
+    window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text, audioB64: _getLastAudioB64(5) } }))
+    return
+  }
+  if (_wakeActive) {
+    // Wake word já detectada — este é o comando
+    window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text, audioB64: _getLastAudioB64(5) } }))
+    deactivateWakeWord()
+    return
+  }
+  // Modo standby: só processa se contiver "maya"
+  if (/\bmaya\b/i.test(text)) {
+    const command = text.replace(/^.*?\bmaya[,!.?]?\s*/i, '').trim()
+    if (command.length > 2) {
+      // "maya, qual o tempo?" — wake word + comando na mesma frase
+      activateWakeWord()
+      window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text: command, audioB64: _getLastAudioB64(5) } }))
+      deactivateWakeWord()
+      console.log(`[maya:mic] wake+comando na mesma frase: "${command}"`)
+    } else {
+      // Só "maya" — ativa e aguarda a próxima frase
+      activateWakeWord()
+    }
+  }
+  // else: sem wake word → descarta silenciosamente
+}
+
 function setMicTrackEnabled(enabled: boolean) {
   if (!_micStream) return
   _micStream.getAudioTracks().forEach(t => { t.enabled = enabled })
@@ -101,7 +161,7 @@ function flushPendingFinal() {
     _pendingFinalText = ''
     _lastInterimText = ''
     if (text) {
-      window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text, audioB64: _getLastAudioB64(5) } }))
+      dispatchSpeech(text)
       console.log('[maya:mic] flushed pending:', text)
     }
   } catch (e) { console.warn('[maya:mic] flushPendingFinal error', e) }
@@ -118,7 +178,7 @@ function scheduleCommit() {
     _pendingFinalText = ''
     _lastInterimText = ''
     if (text) {
-      window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text, audioB64: _getLastAudioB64(5) } }))
+      dispatchSpeech(text)
       console.log('[maya:mic] commit (silence 2s):', text)
     }
   }, 2000)
@@ -168,7 +228,10 @@ function startRecognition() {
         if (_commitTimer) { clearTimeout(_commitTimer); _commitTimer = null } // user still speaking
         _lastInterimTs = Date.now()
         _lastInterimText = interimText.trim()
-        window.dispatchEvent(new CustomEvent('maya:speech-partial', { detail: { text: interimText.trim() } }))
+        // No modo wake word: só exibe parcial quando wake está ativo (evita mostrar tudo)
+        if (!isWakeWordEnabled() || _wakeActive) {
+          window.dispatchEvent(new CustomEvent('maya:speech-partial', { detail: { text: interimText.trim() } }))
+        }
         console.log('[maya:mic] speech interim:', interimText.trim())
       }
 
@@ -184,7 +247,7 @@ function startRecognition() {
         const debounceMs = hasRecentInterim ? 1400 : 900
         _finalTimer = setTimeout(() => {
           if (_pendingFinalText) {
-            window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text: _pendingFinalText, audioB64: _getLastAudioB64(5) } }))
+            dispatchSpeech(_pendingFinalText)
             console.log('[maya:mic] speech final (debounced):', _pendingFinalText)
           }
           _pendingFinalText = ''
