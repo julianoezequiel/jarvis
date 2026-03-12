@@ -24,6 +24,8 @@ interface MayaSidebarProps {
   accentColor?: string
   /** Propagates chat status changes up to MayaWidget (for orb animation) */
   onStatusChange?: (status: string) => void
+  /** Opens the settings modal */
+  onSettingsOpen?: () => void
 }
 
 const SIDEBAR_WIDTH = 380
@@ -35,6 +37,7 @@ export default function MayaSidebar({
   onClose,
   accentColor = '#00d4ff',
   onStatusChange,
+  onSettingsOpen,
 }: MayaSidebarProps) {
   const translate = side === 'right'
     ? (isOpen ? 'translateX(0)' : 'translateX(100%)')
@@ -115,6 +118,35 @@ export default function MayaSidebar({
           </span>
         </div>
 
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <button
+          onClick={onSettingsOpen}
+          aria-label="Configurações"
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'rgba(255,255,255,0.35)',
+            cursor: 'pointer',
+            fontSize: 15,
+            lineHeight: 1,
+            padding: '4px 8px',
+            borderRadius: 4,
+            fontFamily: BASE_FONT,
+            transition: 'color 0.2s, background 0.2s',
+          }}
+          onMouseEnter={e => {
+            const el = e.currentTarget
+            el.style.color = accentColor
+            el.style.background = 'rgba(255,255,255,0.06)'
+          }}
+          onMouseLeave={e => {
+            const el = e.currentTarget
+            el.style.color = 'rgba(255,255,255,0.35)'
+            el.style.background = 'none'
+          }}
+        >
+          ⚙
+        </button>
         <button
           onClick={onClose}
           aria-label="Fechar sidebar"
@@ -143,6 +175,7 @@ export default function MayaSidebar({
         >
           ✕
         </button>
+        </div>
       </div>
 
       {/* ── Body + Footer — Phase 3 chat ──────────────────────────────────── */}
