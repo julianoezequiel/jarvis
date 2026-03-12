@@ -130,7 +130,8 @@ const WAKE_REGEX = /\b(maya|maia|maias|mayas)\b/i
 const WAKE_STRIP_REGEX = /^.*?\b(?:maya|maia|maias|mayas)[,!.?]?\s*/i
 
 // Comandos de voz para entrar em standby ("Maya, pare de escutar")
-const STANDBY_REGEX = /\b(pare?|encerra?|desativ[ae]|desligue?|modo\s+stand.?by|modo\s+espera|stop\s+listening)\b[^.!?]*\b(escutar|ouvir|escuta)\b|\bstop\s+listening\b|\bvolte?\s+ao\s+stand.?by\b|\bmode?o?\s+stand.?by\b/i
+// Cobre: "pare de escutar/ouvir", "modo de espera", "modo standby", "entre em espera", "desligue", "stop listening"
+const STANDBY_REGEX = /\b(?:pare?|para|encerra?)\s+de\s+(?:escutar|ouvir)\b|\bmodo\s+(?:de\s+)?(?:espera|stand.?by)\b|\bentre?\s+em\s+(?:modo\s+(?:de\s+)?)?espera\b|\bdesativ[ae]\w*\s+(?:o\s+)?(?:microfone|mic|escuta|audio)\b|\bdesligue?\s+(?:o\s+)?(?:microfone|mic|escuta|audio)\b|\bstand.?by\b|\bstop\s+listening\b/i
 
 // Ponto central de despacho — aplica o gate de wake word
 function dispatchSpeech(text: string) {
