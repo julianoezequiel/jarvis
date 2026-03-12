@@ -11,6 +11,7 @@ import DeliveriesPanel from './DeliveriesPanel'
 import SpeechCaption from './SpeechCaption'
 import { useAgentOrchestrator } from '../../hooks/useAgentOrchestrator'
 import { playWelcomeTTS } from '../../hooks/useMayaChat'
+import VoiceEnrollModal from './VoiceEnrollModal'
 
 type Phase = 'booting' | 'ready'
 
@@ -21,6 +22,7 @@ export default function MayaCockpit() {
   const [rightOpen, setRightOpen] = useState(false)
   const [leftOpen, setLeftOpen] = useState(false)
   const [winWidth, setWinWidth] = useState(1400)
+  const [enrollFlow, setEnrollFlow] = useState<{ active: boolean; suggestedName: string }>({ active: false, suggestedName: '' })
   const { agentStates } = useAgentOrchestrator()
 
   // Responsive width tracking
@@ -57,6 +59,16 @@ export default function MayaCockpit() {
     const handler = () => setRightTab('docs')
     window.addEventListener('maya:new-delivery', handler)
     return () => window.removeEventListener('maya:new-delivery', handler)
+  }, [])
+
+  // Open VoiceEnrollModal when enroll intent is detected (from voice or chat)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const suggestedName = (e as CustomEvent<{ suggestedName?: string }>).detail?.suggestedName ?? ''
+      setEnrollFlow({ active: true, suggestedName })
+    }
+    window.addEventListener('maya:enroll-intent', handler)
+    return () => window.removeEventListener('maya:enroll-intent', handler)
   }, [])
 
   // Toca mensagem de boas-vindas quando o boot termina.
@@ -266,6 +278,19 @@ export default function MayaCockpit() {
         </div>
       ))}
     <SpeechCaption />
+
+    {/* Voice enrollment modal */}
+    {enrollFlow.active && (
+      <VoiceEnrollModal
+        suggestedName={enrollFlow.suggestedName}
+        onClose={() => setEnrollFlow({ active: false, suggestedName: '' })}
+        onEnrolled={(name) => {
+          // Enable speaker verification now that at least one profile exists
+          localStorage.setItem('maya_speaker_verify_enabled', 'true')
+          console.log(`[maya] voice enrolled: ${name} — speaker verification enabled`)
+        }}
+      />
+    )}
     </div>
   )
 }

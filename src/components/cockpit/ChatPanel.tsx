@@ -80,6 +80,7 @@ export default function ChatPanel({ alwaysOpen = false }: { alwaysOpen?: boolean
 
   const ENABLE_LISTEN_CMDS  = ['ativar escuta', 'ative a escuta', 'ligar microfone', 'ativar microfone']
   const DISABLE_LISTEN_CMDS = ['desativar escuta', 'desative a escuta', 'desligar microfone', 'desativar microfone']
+  const ENROLL_CMDS = ['cadastrar nova voz', 'cadastrar voz', 'nova voz', 'adicionar voz', 'registrar voz', 'adicionar usuário', 'cadastrar usuário']
 
   const onSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault()
@@ -93,6 +94,14 @@ export default function ChatPanel({ alwaysOpen = false }: { alwaysOpen?: boolean
       const lower = trimmed.toLowerCase()
       if (ENABLE_LISTEN_CMDS.some(cmd => lower.includes(cmd)))  { setListen(true);  return }
       if (DISABLE_LISTEN_CMDS.some(cmd => lower.includes(cmd))) { setListen(false); return }
+
+      // Enroll intent — dispatch event for MayaCockpit to handle
+      if (ENROLL_CMDS.some(cmd => lower.includes(cmd))) {
+        const nameMatch = lower.match(/(?:para|de)\s+([a-záàãâéêíóôõúüç][a-záàãâéêíóôõúüç\s]{1,39})/i)
+        const suggestedName = nameMatch ? nameMatch[1].trim() : ''
+        window.dispatchEvent(new CustomEvent('maya:enroll-intent', { detail: { suggestedName } }))
+        // Fall through — also send to LLM so Maya acknowledges
+      }
     }
     addUserMessage(trimmed || '📎 [imagem]')
     await sendMessage({ message: trimmed || 'Analise esta imagem.', imageBase64: capturedImage || undefined, imageMime: capturedMime })

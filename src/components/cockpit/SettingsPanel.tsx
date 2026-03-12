@@ -1,5 +1,5 @@
 "use client"
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 
 type Settings = {
   ttsVoice: string
@@ -45,6 +45,48 @@ export default function SettingsPanel() {
   const [clearing, setClearing] = useState(false)
   const [cleared, setCleared] = useState(false)
 
+  // ── Voice Profiles state ────────────────────────────────────────────────
+  const [profiles, setProfiles] = useState<{ id: string; name: string; enrolledAt: string }[]>([])
+  const [profilesLoading, setProfilesLoading] = useState(false)
+  const [verifyEnabled, setVerifyEnabled] = useState(false)
+  const [deletingProfile, setDeletingProfile] = useState<string | null>(null)
+
+  const loadProfiles = useCallback(async () => {
+    setProfilesLoading(true)
+    try {
+      const res = await fetch('/api/speaker-enroll')
+      if (res.ok) {
+        const data = await res.json()
+        setProfiles(data.profiles ?? [])
+      }
+    } catch (_) {}
+    setProfilesLoading(false)
+  }, [])
+
+  const handleDeleteProfile = async (name: string) => {
+    if (!window.confirm(`Remover voz de "${name}"?`)) return
+    setDeletingProfile(name)
+    try {
+      await fetch('/api/speaker-enroll', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      await loadProfiles()
+    } catch (_) {}
+    setDeletingProfile(null)
+  }
+
+  const handleToggleVerify = (enabled: boolean) => {
+    setVerifyEnabled(enabled)
+    localStorage.setItem('maya_speaker_verify_enabled', enabled ? 'true' : 'false')
+  }
+
+  const handleOpenEnrollModal = () => {
+    window.dispatchEvent(new CustomEvent('maya:enroll-intent', { detail: { suggestedName: '' } }))
+    window.dispatchEvent(new CustomEvent('closeSettingsModal'))
+  }
+
   useEffect(() => {
     try {
       const raw = localStorage.getItem('maya_settings')
@@ -61,6 +103,9 @@ export default function SettingsPanel() {
     } catch (e) {
       // ignore
     }
+    // Load voice verify flag + profiles
+    setVerifyEnabled(localStorage.getItem('maya_speaker_verify_enabled') === 'true')
+    void loadProfiles()
   }, [])
 
   function update<K extends keyof Settings>(key: K, value: Settings[K]) {
@@ -305,6 +350,82 @@ export default function SettingsPanel() {
               Este painel define apenas preferências locais.
             </div>
           </div>
+        </div>
+
+        {/* ── Voice Profiles section ─────────────────────────────────────── */}
+        <div style={{ borderTop: '1px solid rgba(0,212,255,0.1)', paddingTop: '20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(0,212,255,0.45)' }}>
+              🎙 Identificação de Voz
+            </span>
+            <button
+              onClick={handleOpenEnrollModal}
+              style={{
+                fontSize: '11px', fontFamily: 'Share Tech Mono, monospace',
+                background: 'rgba(0,212,255,0.08)', border: '1px solid rgba(0,212,255,0.3)',
+                color: '#00d4ff', borderRadius: 6, padding: '5px 14px', cursor: 'pointer',
+              }}
+            >
+              + Cadastrar nova voz
+            </button>
+          </div>
+
+          {/* Toggle verification */}
+          <label style={{ ...checkboxRowStyle, alignItems: 'flex-start', gap: 10 }}>
+            <input
+              type="checkbox"
+              checked={verifyEnabled}
+              onChange={e => handleToggleVerify(e.target.checked)}
+              style={{ ...checkStyle, marginTop: 2 }}
+              disabled={profiles.length === 0}
+            />
+            <span>
+              <span style={{ fontSize: '12px', color: profiles.length === 0 ? 'rgba(0,212,255,0.35)' : '#00d4ff' }}>
+                Ativar verificação de voz antes de responder
+              </span>
+              <br />
+              <span style={{ fontSize: '10px', color: 'rgba(0,212,255,0.38)' }}>
+                {profiles.length === 0
+                  ? 'Cadastre ao menos uma voz para ativar esta opção'
+                  : 'Maya identificará o falante em cada mensagem de voz'}
+              </span>
+            </span>
+          </label>
+
+          {/* Profile list */}
+          {profilesLoading ? (
+            <span style={{ fontSize: '11px', color: 'rgba(0,212,255,0.45)' }}>Carregando perfis...</span>
+          ) : profiles.length === 0 ? (
+            <span style={{ fontSize: '11px', color: 'rgba(0,212,255,0.38)' }}>Nenhum perfil de voz cadastrado.</span>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {profiles.map(p => (
+                <div key={p.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  background: 'rgba(0,212,255,0.06)', border: '1px solid rgba(0,212,255,0.2)',
+                  borderRadius: 8, padding: '6px 12px',
+                }}>
+                  <span style={{ fontSize: '13px', color: '#e2e8f0', fontFamily: 'Orbitron, sans-serif', fontWeight: 700 }}>
+                    {p.name}
+                  </span>
+                  <span style={{ fontSize: '9px', color: 'rgba(0,212,255,0.4)' }}>
+                    {new Date(p.enrolledAt).toLocaleDateString('pt-BR')}
+                  </span>
+                  <button
+                    onClick={() => handleDeleteProfile(p.name)}
+                    disabled={deletingProfile === p.name}
+                    title={`Remover ${p.name}`}
+                    style={{
+                      background: 'none', border: 'none', color: deletingProfile === p.name ? '#475569' : '#f87171',
+                      cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: '0 2px',
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Footer: Save */}

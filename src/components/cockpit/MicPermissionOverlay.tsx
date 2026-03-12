@@ -1,6 +1,75 @@
 "use client"
 import React, { useState } from 'react'
 
+// ─── Rolling PCM16 audio buffer (for speaker verification) ───────────────────
+// Captures raw 16kHz mono PCM alongside SpeechRecognition.
+// Exposed as window.__mayaGetLastAudioB64(durationSec) → base64 WAV string.
+let _audioCtx: AudioContext | null = null
+const RING_RATE = 16000
+const RING_SECS = 8
+const _ring = new Float32Array(RING_RATE * RING_SECS)
+let _ringHead = 0
+
+function _buildWAV(pcm: Int16Array, sampleRate: number): ArrayBuffer {
+  const bl = 44 + pcm.length * 2
+  const buf = new ArrayBuffer(bl)
+  const dv = new DataView(buf)
+  const w4 = (o: number, s: string) => { for (let i = 0; i < 4; i++) dv.setUint8(o + i, s.charCodeAt(i)) }
+  w4(0, 'RIFF'); dv.setUint32(4, 36 + pcm.length * 2, true)
+  w4(8, 'WAVE'); w4(12, 'fmt ')
+  dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true)
+  dv.setUint32(24, sampleRate, true); dv.setUint32(28, sampleRate * 2, true)
+  dv.setUint16(32, 2, true); dv.setUint16(34, 16, true)
+  w4(36, 'data'); dv.setUint32(40, pcm.length * 2, true)
+  for (let i = 0; i < pcm.length; i++) dv.setInt16(44 + i * 2, pcm[i], true)
+  return buf
+}
+
+function _initRollingAudio(stream: MediaStream) {
+  if (_audioCtx) return
+  try {
+    _audioCtx = new AudioContext({ sampleRate: RING_RATE })
+    const source = _audioCtx.createMediaStreamSource(stream)
+    // ScriptProcessorNode is deprecated but universally supported; AudioWorklet needs extra setup
+    const proc = _audioCtx.createScriptProcessor(2048, 1, 1)
+    const ringSize = _ring.length
+    proc.onaudioprocess = (e) => {
+      const data = e.inputBuffer.getChannelData(0)
+      for (let i = 0; i < data.length; i++) {
+        _ring[_ringHead % ringSize] = data[i]
+        _ringHead++
+      }
+    }
+    source.connect(proc)
+    proc.connect(_audioCtx.destination)
+    console.log('[maya:mic] rolling PCM16 buffer initialized (8s @ 16kHz)')
+  } catch (e) {
+    console.warn('[maya:mic] rolling audio init failed:', e)
+  }
+}
+
+function _getLastAudioB64(durationSec = 5): string | null {
+  if (_ringHead < RING_RATE * 0.5) return null
+  const n = Math.min(durationSec * RING_RATE, _ringHead)
+  const ringSize = _ring.length
+  const start = Math.max(0, _ringHead - n)
+  const pcm = new Int16Array(n)
+  for (let i = 0; i < n; i++) {
+    const s = _ring[(start + i) % ringSize]
+    pcm[i] = Math.max(-32768, Math.min(32767, Math.round(s * 32767)))
+  }
+  const wavBuf = _buildWAV(pcm, RING_RATE)
+  const bytes = new Uint8Array(wavBuf)
+  let b = ''
+  for (let i = 0; i < bytes.length; i++) b += String.fromCharCode(bytes[i])
+  return btoa(b)
+}
+
+// Exposed on window so external hooks can capture audio on demand
+if (typeof window !== 'undefined') {
+  ;(window as any).__mayaGetLastAudioB64 = _getLastAudioB64
+}
+
 // ─── Persistent recognition manager (module-level, survives component unmount) ───
 // Lives outside React so it never gets killed by component lifecycle.
 let _rec: any = null
@@ -32,7 +101,7 @@ function flushPendingFinal() {
     _pendingFinalText = ''
     _lastInterimText = ''
     if (text) {
-      window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text } }))
+      window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text, audioB64: _getLastAudioB64(5) } }))
       console.log('[maya:mic] flushed pending:', text)
     }
   } catch (e) { console.warn('[maya:mic] flushPendingFinal error', e) }
@@ -49,7 +118,7 @@ function scheduleCommit() {
     _pendingFinalText = ''
     _lastInterimText = ''
     if (text) {
-      window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text } }))
+      window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text, audioB64: _getLastAudioB64(5) } }))
       console.log('[maya:mic] commit (silence 2s):', text)
     }
   }, 2000)
@@ -115,7 +184,7 @@ function startRecognition() {
         const debounceMs = hasRecentInterim ? 1400 : 900
         _finalTimer = setTimeout(() => {
           if (_pendingFinalText) {
-            window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text: _pendingFinalText } }))
+            window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text: _pendingFinalText, audioB64: _getLastAudioB64(5) } }))
             console.log('[maya:mic] speech final (debounced):', _pendingFinalText)
           }
           _pendingFinalText = ''
@@ -283,6 +352,7 @@ if (typeof window !== 'undefined') {
     navigator.mediaDevices?.getUserMedia({ audio: true })
       .then((stream) => {
         _micStream = stream
+        _initRollingAudio(stream)
         setupListenControl()
         setupUserMute()
         startRecognition()

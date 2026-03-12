@@ -594,6 +594,7 @@ export function useMayaChat() {
   // Listen for speech events — intercept commands before sending to LLM
   useEffect(() => {
     const STOP_COMMANDS = ['silêncio', 'silencio', 'pare de falar', 'para de falar', 'cala boca', 'cale-se', 'para tudo', 'pare tudo']
+    const ENROLL_COMMANDS = ['cadastrar nova voz', 'cadastrar voz', 'nova voz', 'adicionar voz', 'registrar voz', 'adicionar usuário', 'cadastrar usuário']
 
     const handler = (e: any) => {
       const raw = e?.detail?.text
@@ -631,7 +632,56 @@ export function useMayaChat() {
         return
       }
 
-      // Normal message
+      // ── Enroll intent detection — open VoiceEnrollModal ──────────────────
+      if (ENROLL_COMMANDS.some(cmd => normalized.includes(cmd))) {
+        console.log('[maya:speech] ENROLL intent detected')
+        // Try to extract a name: "cadastrar voz para Juliano"
+        const nameMatch = normalized.match(/(?:para|de)\s+([a-záàãâéêíóôõúüç][a-záàãâéêíóôõúüç\s]{1,39})/i)
+        const suggestedName = nameMatch ? nameMatch[1].trim() : ''
+        window.dispatchEvent(new CustomEvent('maya:enroll-intent', { detail: { suggestedName } }))
+        // Also send to LLM so Maya acknowledges verbally
+        addUserMessage(raw.trim())
+        void sendMessage({ message: raw.trim() })
+        return
+      }
+
+      // ── Speaker verification (opt-in, enabled after first enrollment) ─────
+      const verifyEnabled = typeof localStorage !== 'undefined' && localStorage.getItem('maya_speaker_verify_enabled') === 'true'
+      const audioB64: string | null = e?.detail?.audioB64 ?? null
+
+      if (verifyEnabled && audioB64) {
+        // Run verification before sending to LLM (async within event handler)
+        stopCurrentAudio()
+        abortRef.current?.abort()
+        setStatus('thinking')
+
+        const runVerify = async () => {
+          let speakerPrefix = ''
+          try {
+            const res = await fetch('/api/speaker-verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ audioB64 }),
+            })
+            const result = await res.json()
+            if (result.reason !== 'no_enrollment') {
+              speakerPrefix = result.speaker
+                ? `[Falante: ${result.speaker}] `
+                : `[Falante não reconhecido] `
+              console.log(`[maya:speech] verification: match=${result.match}, speaker=${result.speaker}, conf=${result.confidence}`)
+            }
+          } catch (err) {
+            console.warn('[maya:speech] verification failed (fail open):', err)
+          }
+          const finalMessage = speakerPrefix + raw.trim()
+          addUserMessage(raw.trim())
+          void sendMessage({ message: finalMessage })
+        }
+        void runVerify()
+        return
+      }
+
+      // Normal message (no verification)
       console.log(`[maya:speech] SENDING to LLM: "${raw.trim()}"`)
       stopCurrentAudio()
       abortRef.current?.abort()
