@@ -61,6 +61,32 @@ if (typeof window !== 'undefined') {
   })
 }
 
+// ─── Speaker session trust ───────────────────────────────────────────────────
+// Once a speaker passes the INITIAL threshold (high confidence), they are
+// trusted for the session. Subsequent verifications use a much lower threshold
+// (SESSION_THRESHOLD) — just enough to catch a session-hijacker speaking over
+// the verified user. Trust expires after SESSION_EXPIRE_MS of silence.
+const INITIAL_THRESHOLD_DEFAULT = 0.70   // first-pass: requires solid match
+const SESSION_THRESHOLD          = 0.45  // subsequent: just "sounds like the same person"
+const SESSION_EXPIRE_MS          = 8 * 60 * 1000  // 8 minutes of inactivity
+
+let _sessionSpeaker: string | null = null
+let _sessionExpireTimer: ReturnType<typeof setTimeout> | null = null
+
+function _touchSession(speaker: string) {
+  _sessionSpeaker = speaker
+  if (_sessionExpireTimer) clearTimeout(_sessionExpireTimer)
+  _sessionExpireTimer = setTimeout(() => {
+    console.log('[maya:session] trust expired — next utterance requires full verification')
+    _sessionSpeaker = null
+  }, SESSION_EXPIRE_MS)
+}
+
+function _clearSession() {
+  _sessionSpeaker = null
+  if (_sessionExpireTimer) { clearTimeout(_sessionExpireTimer); _sessionExpireTimer = null }
+}
+
 // Mute/unmute the speech recognition while MAYA is speaking to prevent feedback loop
 function dispatchMicControl(enabled: boolean) {
   if (typeof window !== 'undefined') {
@@ -85,6 +111,11 @@ export function stopCurrentAudio() {
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', stopCurrentAudio)
   window.addEventListener('pagehide', stopCurrentAudio)
+  // Lock session from Settings panel
+  window.addEventListener('maya:lock-session', () => {
+    _clearSession()
+    console.log('[maya:session] manually locked — next utterance requires full verification')
+  })
   // Also stop when tab becomes hidden — unless user opted to keep audio in background
   document.addEventListener('visibilitychange', () => {
     try {
@@ -677,32 +708,59 @@ export function useMayaChat() {
           let speakerPrefix = ''
           try {
             const rawThreshold = localStorage.getItem('maya_verify_threshold')
-            const threshold = rawThreshold ? parseFloat(rawThreshold) : 0.85
-            const res = await fetch('/api/speaker-verify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ audioB64, threshold }),
-            })
-            const result = await res.json()
-            console.log(`[maya:speech] verification: match=${result.match}, speaker=${result.speaker}, conf=${result.confidence}, reason=${result.reason}`)
+            const initialThreshold = rawThreshold ? parseFloat(rawThreshold) : INITIAL_THRESHOLD_DEFAULT
 
-            if (result.reason === 'compared') {
-              if (result.match) {
-                // Falante reconhecido — adiciona prefixo com o nome
-                speakerPrefix = `[Falante: ${result.speaker}] `
-              } else {
-                // Falante NÃO reconhecido — bloqueia a mensagem
-                console.log(`[maya:speech] BLOQUEADO — falante não reconhecido (confiança=${result.confidence}, threshold=${threshold})`)
+            // ── Session trust: already verified this session ──────────────
+            if (_sessionSpeaker) {
+              // Still verify, but use the much lower session threshold
+              const res = await fetch('/api/speaker-verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ audioB64, threshold: SESSION_THRESHOLD }),
+              })
+              const result = await res.json()
+              console.log(`[maya:speech] session-verify: match=${result.match}, conf=${result.confidence}, trusted=${_sessionSpeaker}`)
+
+              if (result.reason === 'compared' && !result.match) {
+                // Different person took over mid-session
+                console.log(`[maya:speech] SESSION HIJACK detected (conf=${result.confidence}) — clearing trust`)
+                _clearSession()
                 setStatus('idle')
-                window.dispatchEvent(new CustomEvent('maya:speech-denied', {
-                  detail: { confidence: result.confidence, threshold },
-                }))
-                void speakText('Desculpe, não reconheci sua voz. Acesso negado.')
-                return // não envia para o LLM
+                window.dispatchEvent(new CustomEvent('maya:speech-denied', { detail: { confidence: result.confidence } }))
+                void speakText('Sessão encerrada. Voz diferente detectada.')
+                return
               }
+              // Refresh session timer on activity
+              _touchSession(_sessionSpeaker)
+              speakerPrefix = `[Falante: ${_sessionSpeaker}] `
+            } else {
+              // ── Initial verification: require full confidence ─────────────
+              const res = await fetch('/api/speaker-verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ audioB64, threshold: initialThreshold }),
+              })
+              const result = await res.json()
+              console.log(`[maya:speech] verification: match=${result.match}, speaker=${result.speaker}, conf=${result.confidence}, reason=${result.reason}`)
+
+              if (result.reason === 'compared') {
+                if (result.match) {
+                  // Verified — start session trust
+                  _touchSession(result.speaker ?? 'unknown')
+                  speakerPrefix = `[Falante: ${result.speaker}] `
+                  console.log(`[maya:speech] session trust started for "${result.speaker}" (conf=${result.confidence})`)
+                } else {
+                  console.log(`[maya:speech] BLOQUEADO — falante não reconhecido (confiança=${result.confidence}, threshold=${initialThreshold})`)
+                  setStatus('idle')
+                  window.dispatchEvent(new CustomEvent('maya:speech-denied', {
+                    detail: { confidence: result.confidence, threshold: initialThreshold },
+                  }))
+                  void speakText('Desculpe, não reconheci sua voz. Acesso negado.')
+                  return
+                }
+              }
+              // reason === 'no_enrollment': acesso livre | 'no_voice_detected' | 'error': fail-open
             }
-            // reason === 'no_enrollment': acesso livre (nenhum perfil cadastrado)
-            // reason === 'no_voice_detected' | 'error': fail-open (não bloqueia)
           } catch (err) {
             console.warn('[maya:speech] verification failed (fail open):', err)
           }

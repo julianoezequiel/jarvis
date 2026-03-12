@@ -52,7 +52,7 @@ export default function SettingsPanel() {
   const [wakeWordEnabled, setWakeWordEnabled] = useState(true)
   const [conversationTimeout, setConversationTimeout] = useState(60)
   const [deletingProfile, setDeletingProfile] = useState<string | null>(null)
-  const [verifyThreshold, setVerifyThreshold] = useState(0.85)
+  const [verifyThreshold, setVerifyThreshold] = useState(0.70)
 
   const loadProfiles = useCallback(async () => {
     setProfilesLoading(true)
@@ -404,15 +404,15 @@ export default function SettingsPanel() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '11px', color: 'rgba(0,212,255,0.6)' }}>Sensibilidade do reconhecimento</span>
                 <span style={{ fontSize: '11px', fontFamily: 'Share Tech Mono, monospace', color: '#00d4ff' }}>
-                  {verifyThreshold === 0.95 ? 'Muito alto' :
-                   verifyThreshold >= 0.85 ? 'Alto' :
-                   verifyThreshold >= 0.75 ? 'Médio' : 'Baixo'}
+                  {verifyThreshold >= 0.85 ? 'Alto' :
+                   verifyThreshold >= 0.75 ? 'Médio' :
+                   verifyThreshold >= 0.65 ? 'Baixo' : 'Mínimo'}
                   {' '}({verifyThreshold.toFixed(2)})
                 </span>
               </div>
               <input
                 type="range"
-                min={0.60} max={0.95} step={0.05}
+                min={0.55} max={0.90} step={0.05}
                 value={verifyThreshold}
                 onChange={e => handleThresholdChange(parseFloat(e.target.value))}
                 style={{ width: '100%', accentColor: '#00d4ff', cursor: 'pointer' }}
@@ -421,6 +421,17 @@ export default function SettingsPanel() {
                 <span style={{ fontSize: '9px', color: 'rgba(0,212,255,0.35)' }}>← Mais permissivo</span>
                 <span style={{ fontSize: '9px', color: 'rgba(0,212,255,0.35)' }}>Mais restrito →</span>
               </div>
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('maya:lock-session'))}
+                style={{
+                  marginTop: 4, padding: '5px 10px', fontSize: '10px', letterSpacing: 1,
+                  background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.35)',
+                  borderRadius: 6, color: 'rgba(239,68,68,0.8)', cursor: 'pointer',
+                  fontFamily: 'Orbitron, sans-serif', textTransform: 'uppercase',
+                }}
+              >
+                🔒 Encerrar sessão verificada
+              </button>
             </div>
           )}
 
