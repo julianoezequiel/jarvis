@@ -3,7 +3,7 @@
 **Task:** JARVIS-TASK-002  
 **Branch:** `feature/jarvis-TASK-002`  
 **Início:** 12/03/2026  
-**Última atualização:** 12/03/2026 (sessão 3)  
+**Última atualização:** 12/03/2026 (sessão 4)  
 
 ---
 
@@ -14,7 +14,7 @@
 | 1 | Abstração de Banco de Dados (`src/lib/db/`) | ✅ Concluído |
 | 2 | Widget Core (Orb + Sidebar + Maximizado) | ✅ Concluído |
 | 3 | SettingsModal com 4 abas | ✅ Concluído |
-| 4 | Enrollment Externo via evento | ⏳ Não iniciado |
+| 4 | Enrollment Externo via evento | ✅ Concluído |
 | 5 | Embed Script (script tag + iframe) | ⏳ Não iniciado |
 | 6 | Integração PontoCore Frontend | ⏳ Não iniciado |
 | 7 | Dockerfile e Containerização | ⏳ Não iniciado |
@@ -157,11 +157,41 @@ Este projeto segue metodologias de desenvolvimento profissional. Toda implementa
 
 ---
 
+### 12/03/2026 — Sessão 4: Fase 4 concluída
+
+#### Fase 4 — Enrollment Externo via evento
+
+- ✅ `src/components/widget/WidgetEnrollModal.tsx` — modal widget-native de enrollment de voz
+  - Props: `isOpen`, `onClose`, `suggestedName?`, `userId?`, `accentColor?`, `onEnrolled?`
+  - Steps: `name → recording → processing → done / error` (mesma UX do cockpit VoiceEnrollModal)
+  - Captura 5s de áudio via `window.__mayaGetLastAudioB64`
+  - `useSpeakerVerify.enrollByName()` → `POST /api/speaker-enroll`
+  - Dispara `maya:enroll-complete` com `{ name, userId, success, error? }` em sucesso **e** falha
+  - z-index `10001` (acima do SettingsModal em 10000)
+  - 100% inline styles + `accentColor` parametrizável
+- ✅ `src/components/widget/MayaWidget.tsx` — wiring dos dois eventos de enrollment
+  - Ouve `maya:enroll-intent` (interno — aba Vozes do WidgetSettingsModal): `{ suggestedName? }`
+  - Ouve `maya:enroll-voice` (externo — API para sistemas host): `{ name?, userId? }`
+  - Ambos: expande sidebar + abre `WidgetEnrollModal` com campos pré-preenchidos
+  - Estado: `isEnrollOpen`, `enrollName`, `enrollUserId`
+- ✅ `docs/04-API-REFERENCE/embed-events.md` — documentação completa do contrato de eventos
+  - `maya:enroll-voice` → payload, campos, comportamento
+  - `maya:enroll-complete` → payload, campos, success/error
+  - Snippet Angular TypeScript completo com tipos recomendados
+  - Fluxo de sequência HOST ↔ WIDGET
+- ✅ `src/components/widget/__tests__/WidgetEnrollModal.test.tsx` — 16 novos testes
+  - Modal oculto quando `isOpen=false`
+  - Header, pré-preenchimento de nome, botão desabilitado sem nome
+  - Fechamento via × e via Escape
+  - Enter e click em Gravar → step recording
+  - MayaWidget: `maya:enroll-voice` abre sidebar + modal com nome pré-preenchido
+  - MayaWidget: `maya:enroll-intent` abre sidebar + modal; sem suggestedName = input vazio
+- ✅ **100/100 testes passando** (`npx vitest run`)
+- ✅ `npx tsc --noEmit` — zero erros
+- ✅ Commit `032874c`: `feat: Fase 4 - Enrollment externo via evento (maya:enroll-voice/complete) (Refs: TASK-002)`
+
+---
+
 ## Próximo Passo
 
-**Fase 4 — Enrollment Externo via evento**
-
-- Expor API de enrollment para sistemas host via `postMessage` / custom event
-- Permitir que o PontoCore dispare o flow de cadastro de voz sem abrir o widget
-- Contrato: `window.dispatchEvent(new CustomEvent('maya:enroll-intent', { detail: { suggestedName } }))`
-- Revisar `VoiceEnrollModal` para usar dentro do widget (sem depender do cockpit)
+**Fase 5 — Embed Script (script tag + iframe)**

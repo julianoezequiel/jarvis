@@ -45,6 +45,8 @@ export interface MayaWidgetConfig {
 
 interface MayaWidgetProps {
   config?: MayaWidgetConfig
+  /** Called whenever the sidebar open/close state changes (used by the embed iframe). */
+  onOpenChange?: (isOpen: boolean) => void
 }
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
@@ -67,10 +69,13 @@ function resolveOrbConfig(partial?: Partial<OrbConfig>): OrbConfig {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function MayaWidget({ config }: MayaWidgetProps) {
+export default function MayaWidget({ config, onOpenChange }: MayaWidgetProps) {
   const [isOpen, setIsOpen]               = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [sideOverride, setSideOverride]     = useState<SidebarSide | null>(null)
+
+  // Notify embed parent whenever open state changes
+  useEffect(() => { onOpenChange?.(isOpen) }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Phase 4 — external enrollment events
   const [isEnrollOpen, setIsEnrollOpen]   = useState(false)
