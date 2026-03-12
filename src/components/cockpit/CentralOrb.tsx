@@ -28,10 +28,12 @@ interface LerpOpts {
 }
 
 function targetOpts(s: string, muted: boolean): LerpOpts {
-  if (muted && (s === 'mic-off' || s === 'idle' || s === 'done' || s === 'listening'))
+  if (muted && (s === 'mic-off' || s === 'idle' || s === 'done' || s === 'listening' || s === 'standby'))
     return { cr:255, cg:60,  cb:60,  label:'MUDO',      speed:0.45, amplitude:4,  glow:0.65, pulse:0    }
   if (s === 'mic-off')
     return { cr:110, cg:110, cb:145, label:'MIC OFF',   speed:0.40, amplitude:3,  glow:0.45, pulse:0    }
+  if (s === 'standby')
+    return { cr:80,  cg:60,  cb:20,  label:'EM ESPERA', speed:0.30, amplitude:2,  glow:0.30, pulse:0    }
   if (s === 'idle' || s === 'done')
     return { cr:0,   cg:212, cb:255, label:'ESCUTANDO', speed:1.20, amplitude:6,  glow:0.80, pulse:0    }
   if (s === 'thinking' || s === 'streaming')
@@ -359,10 +361,27 @@ export default function CentralOrb() {
         stateRef.current = newStatus
       }
     }
+    // Wake word events: switch between standby <-> idle-ready
+    const onWakeActivated = () => {
+      if (!mutedRef.current) stateRef.current = 'listening'
+    }
+    const onWakeDeactivated = () => {
+      // Return to standby only if wake word mode is still enabled
+      try {
+        const wakeEnabled = localStorage.getItem('maya_wake_word_enabled') !== 'false'
+        if (!mutedRef.current && stateRef.current !== 'thinking' && stateRef.current !== 'streaming' && !stateRef.current.startsWith('speaking')) {
+          stateRef.current = wakeEnabled ? 'standby' : 'idle'
+        }
+      } catch { stateRef.current = 'idle' }
+    }
     window.addEventListener('maya:status', handler as EventListener)
+    window.addEventListener('maya:wake-activated', onWakeActivated)
+    window.addEventListener('maya:wake-deactivated', onWakeDeactivated)
     return () => {
       if (animRef.current) cancelAnimationFrame(animRef.current)
       window.removeEventListener('maya:status', handler as EventListener)
+      window.removeEventListener('maya:wake-activated', onWakeActivated)
+      window.removeEventListener('maya:wake-deactivated', onWakeDeactivated)
     }
   }, [])
 

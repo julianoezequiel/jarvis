@@ -388,7 +388,8 @@ function setupUserMute() {
       setMicTrackEnabled(true)
       _recStopped = false
       startRecognition()
-      window.dispatchEvent(new CustomEvent('maya:status', { detail: { status: 'idle' } }))
+      const reactivateStatus = isWakeWordEnabled() ? 'standby' : 'idle'
+      window.dispatchEvent(new CustomEvent('maya:status', { detail: { status: reactivateStatus } }))
     }
   })
 }
@@ -443,6 +444,9 @@ if (typeof window !== 'undefined') {
         setupUserMute()
         startRecognition()
         startWatchdog()
+        if (isWakeWordEnabled()) {
+          window.dispatchEvent(new CustomEvent('maya:status', { detail: { status: 'standby' } }))
+        }
         console.log('[maya:mic] auto-init: recognition started')
       })
       .catch((e) => {
@@ -451,6 +455,9 @@ if (typeof window !== 'undefined') {
         setupUserMute()
         startRecognition()
         startWatchdog()
+        if (isWakeWordEnabled()) {
+          window.dispatchEvent(new CustomEvent('maya:status', { detail: { status: 'standby' } }))
+        }
       })
   })
 }
@@ -501,6 +508,9 @@ export default function MicPermissionOverlay({ onGranted, onDenied }: { onGrante
         setupListenControl()
         startRecognition()
         startWatchdog()
+        if (isWakeWordEnabled()) {
+          window.dispatchEvent(new CustomEvent('maya:status', { detail: { status: 'standby' } }))
+        }
       } catch (err) {
         console.error('[maya:mic] recognition init failed', err)
       }
