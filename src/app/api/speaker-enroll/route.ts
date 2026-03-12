@@ -10,7 +10,7 @@
  * DELETE { name: string } → removes that profile
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { extractEmbedding } from '../../../lib/voskSpeaker'
+import { extractMultipleEmbeddings } from '../../../lib/voskSpeaker'
 import { db } from '../../../lib/db'
 
 const CATEGORY = 'voice_profile'
@@ -41,45 +41,16 @@ export async function POST(req: NextRequest) {
 
   const cleanName = name.trim()
 
-  // Extract speaker embedding via Python/Vosk
-  const embedding = await extractEmbedding(audioB64)
-  if (!embedding) {
-    return jsonErr('No voice detected in the audio clip. Please speak clearly for at least 3 seconds.', 422)
+  // Extract multiple embeddings from the long enrollment recording (6 segments × 5s)
+  const embeddings = await extractMultipleEmbeddings(audioB64)
+  if (!embeddings || embeddings.length === 0) {
+    return jsonErr('No voice detected in the recording. Please speak clearly for at least 10 seconds.', 422)
   }
 
   try {
-    // Fetch any existing samples for this name (case-insensitive match)
-    const existing = await db.select<{ fact: string }>('user_facts', {
-      columns: 'fact',
-      filters: [
-        { column: 'category', op: 'eq', value: CATEGORY },
-        { column: 'fact', op: 'ilike', value: `%"name":"${cleanName}"%` },
-      ],
-    })
+    const fact = JSON.stringify({ name: cleanName, voiceprints: embeddings })
 
-    const existingVoiceprints: number[][] = []
-    for (const row of existing) {
-      try {
-        const p = JSON.parse(row.fact)
-        if (Array.isArray(p.voiceprints)) {
-          existingVoiceprints.push(
-            ...(p.voiceprints as unknown[]).filter(
-              (v): v is number[] => Array.isArray(v) && v.length === 128
-            )
-          )
-        } else if (Array.isArray(p.voiceprint) && p.voiceprint.length === 128) {
-          // Migrate legacy single-sample format
-          existingVoiceprints.push(p.voiceprint as number[])
-        }
-      } catch { /* skip malformed rows */ }
-    }
-
-    // Keep up to 4 existing + 1 new = max 5 samples total
-    const MAX_SAMPLES = 5
-    const voiceprints = [...existingVoiceprints, embedding].slice(-MAX_SAMPLES)
-    const fact = JSON.stringify({ name: cleanName, voiceprints })
-
-    // Remove all old records for this name, then insert the merged record
+    // Replace all previous samples with the fresh batch from this recording
     await db.delete('user_facts', [
       { column: 'category', op: 'eq', value: CATEGORY },
       { column: 'fact', op: 'ilike', value: `%"name":"${cleanName}"%` },
@@ -91,7 +62,7 @@ export async function POST(req: NextRequest) {
       source: 'speaker-enroll',
     })
 
-    return NextResponse.json({ ok: true, name: cleanName, samplesCount: voiceprints.length })
+    return NextResponse.json({ ok: true, name: cleanName, samplesCount: embeddings.length })
   } catch (err) {
     console.error('[speaker-enroll] DB error:', err)
     return jsonErr('Failed to save voice profile', 500)

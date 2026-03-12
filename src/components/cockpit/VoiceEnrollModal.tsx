@@ -15,12 +15,13 @@ interface Props {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const RECORD_SECS = 5
+const RECORD_SECS = 35
 
-/** Texto de amostra para o usuário ler em voz alta durante a gravação.
- *  ~5 segundos em ritmo normal de fala. Não contém a wake word (Maya/Maia). */
+/** Texto de amostra — ~30s de leitura em ritmo normal (60 palavras à 120 wpm).
+ *  O sistema extrai automaticamente 6 embeddings de 5s cada.
+ *  Não contém a wake word (Maya/Maia). */
 const SAMPLE_TEXT =
-  'Acesso autorizado. Este sistema registra minha voz para identificação biométrica segura. Confirmando identidade do operador agora.'
+  'Sistema AIOS, iniciando protocolo de verificação de identidade vocal. Confirmo que sou o operador autorizado deste sistema de inteligência artificial. Esta tecnologia registra minha voz para garantir que apenas usuários autorizados possam acessar os recursos do assistente. Reconheço minha responsabilidade pelo uso ético e seguro de todas as funcionalidades disponíveis. Autorização biométrica registrada com sucesso. Sistema pronto para operação.'
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -56,6 +57,8 @@ export default function VoiceEnrollModal({ suggestedName = '', onClose, onEnroll
     if (!name.trim()) return
     setStep('recording')
     setCountdown(RECORD_SECS)
+    // Signal MicPermissionOverlay to start capturing the enrollment audio buffer
+    window.dispatchEvent(new CustomEvent('maya:enroll-capture-start'))
 
     countdownRef.current = setInterval(() => {
       setCountdown(prev => {
@@ -73,15 +76,14 @@ export default function VoiceEnrollModal({ suggestedName = '', onClose, onEnroll
 
   async function finishRecording() {
     setStep('processing')
-
-    // The rolling PCM16 buffer in MicPermissionOverlay captures audio continuously.
-    // We grab the last RECORD_SECS seconds.
-    const getAudio = (window as any).__mayaGetLastAudioB64 as ((sec: number) => string | null) | undefined
-    const audioB64 = getAudio?.(RECORD_SECS) ?? null
+    // Stop enrollment capture and retrieve the accumulated audio
+    window.dispatchEvent(new CustomEvent('maya:enroll-capture-stop'))
+    const getEnrollAudio = (window as any).__mayaGetEnrollB64 as (() => string | null) | undefined
+    const audioB64 = getEnrollAudio?.() ?? null
 
     if (!audioB64) {
       setStep('error')
-      setMessage('Áudio não capturado. Certifique-se de que o microfone está ativo e fale novamente.')
+      setMessage('Não foi possível capturar áudio. Certifique-se de que o microfone está ativo e leia o texto em voz alta.')
       return
     }
 
@@ -185,8 +187,9 @@ export default function VoiceEnrollModal({ suggestedName = '', onClose, onEnroll
         {step === 'name' && (
           <>
             <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
-              Informe o nome da pessoa e clique em <strong style={{ color: '#00d4ff' }}>GRAVAR</strong>.
-              Fale por <strong style={{ color: '#00ff88' }}>{RECORD_SECS} segundos</strong> — leia o texto abaixo em voz alta.
+              Informe o nome e clique em <strong style={{ color: '#00d4ff' }}>GRAVAR</strong>.
+              Leia o texto abaixo em voz alta, com calma, por <strong style={{ color: '#00ff88' }}>{RECORD_SECS} segundos</strong>.
+              O sistema extraiá automaticamente múltiplas amostras de voz.
             </div>
             {/* Sample text preview */}
             <div style={{

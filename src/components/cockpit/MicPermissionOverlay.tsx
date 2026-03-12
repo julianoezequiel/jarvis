@@ -39,6 +39,8 @@ function _initRollingAudio(stream: MediaStream) {
         _ring[_ringHead % ringSize] = data[i]
         _ringHead++
       }
+      // Enrollment capture — separate buffer, active only during recording step
+      if (_enrollCapturing) _enrollPCM.push(new Float32Array(data))
     }
     source.connect(proc)
     proc.connect(_audioCtx.destination)
@@ -65,9 +67,34 @@ function _getLastAudioB64(durationSec = 5): string | null {
   return btoa(b)
 }
 
+// ─── Enrollment capture buffer ─────────────────────────────────────────────
+// Records audio only while _enrollCapturing = true (during 30-35s enrollment).
+// Independent of the 8s ring buffer — can hold up to ~40s.
+let _enrollCapturing = false
+let _enrollPCM: Float32Array[] = []
+
+/** Build a base64 WAV from all accumulated enrollment chunks. */
+function _getEnrollB64(): string | null {
+  if (_enrollPCM.length === 0) return null
+  const totalSamples = _enrollPCM.reduce((s, c) => s + c.length, 0)
+  const merged = new Float32Array(totalSamples)
+  let offset = 0
+  for (const chunk of _enrollPCM) { merged.set(chunk, offset); offset += chunk.length }
+  const pcm16 = new Int16Array(totalSamples)
+  for (let i = 0; i < totalSamples; i++) {
+    pcm16[i] = Math.max(-32768, Math.min(32767, Math.round(merged[i] * 32767)))
+  }
+  const wav = _buildWAV(pcm16, RING_RATE)
+  const bytes = new Uint8Array(wav)
+  let bin = ''
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
+  return btoa(bin)
+}
+
 // Exposed on window so external hooks can capture audio on demand
 if (typeof window !== 'undefined') {
   ;(window as any).__mayaGetLastAudioB64 = _getLastAudioB64
+  ;(window as any).__mayaGetEnrollB64 = _getEnrollB64
 }
 
 // ─── Persistent recognition manager (module-level, survives component unmount) ───
@@ -474,6 +501,18 @@ function setupEnrollControl() {
   // maya:enroll-end — modal closed: just log; user re-activates by saying "Maya"
   window.addEventListener('maya:enroll-end', () => {
     console.log('[maya:mic] enroll-end — enrollment modal closed')
+  })
+  // maya:enroll-capture-start — user clicked Record: begin capturing into enrollment buffer
+  window.addEventListener('maya:enroll-capture-start', () => {
+    _enrollCapturing = true
+    _enrollPCM = []
+    console.log('[maya:mic] enrollment capture started')
+  })
+  // maya:enroll-capture-stop — timer finished: stop capture (buffer preserved for retrieval)
+  window.addEventListener('maya:enroll-capture-stop', () => {
+    _enrollCapturing = false
+    const totalSecs = (_enrollPCM.reduce((s, c) => s + c.length, 0) / RING_RATE).toFixed(1)
+    console.log(`[maya:mic] enrollment capture stopped — ${_enrollPCM.length} chunks (~${totalSecs}s)`)
   })
 }
 

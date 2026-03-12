@@ -149,9 +149,96 @@ def cmd_compare(wav_path: str, profiles_json: str, threshold: float = 0.85):
     except Exception as e:
         print(json.dumps({"error": str(e)}))
 
+def cmd_enroll_multi(wav_path: str, n_segments: int = 6):
+    """
+    Extract up to n_segments speaker embeddings from equally-spaced 5-second
+    segments of a long WAV recording (ideally 30-35 seconds).
+    Returns JSON: {"embeddings": [[...128 floats], ...], "count": N}
+    """
+    import wave
+    import io
+    import struct
+    try:
+        with wave.open(wav_path, "rb") as wf:
+            sample_rate = wf.getframerate()
+            n_channels = wf.getnchannels()
+            raw_bytes = wf.readframes(wf.getnframes())
+
+        # Convert to mono PCM16 bytes if stereo
+        if n_channels == 2:
+            n_samp = len(raw_bytes) // 2
+            stereo = struct.unpack(f'{n_samp}h', raw_bytes)
+            mono = [(stereo[i] + stereo[i + 1]) // 2 for i in range(0, n_samp, 2)]
+            pcm = struct.pack(f'{len(mono)}h', *mono)
+        else:
+            pcm = raw_bytes
+
+        total_frames = len(pcm) // 2  # number of int16 samples
+        seg_secs = 5
+        seg_frames = seg_secs * sample_rate
+
+        if total_frames < sample_rate:  # less than 1 second
+            print(json.dumps({"error": "audio too short (minimum 1 second required)"}))
+            return
+
+        # Distribute start points evenly across the audio
+        actual_n = min(n_segments, max(1, total_frames // seg_frames))
+        if actual_n == 1:
+            start_frames = [0]
+        else:
+            last_start = max(0, total_frames - seg_frames)
+            step = last_start / (actual_n - 1)
+            start_frames = [int(round(i * step)) for i in range(actual_n)]
+
+        asr_model = get_asr_model()
+        spk_model = get_spk_model()
+        import vosk
+        embeddings = []
+
+        for start in start_frames:
+            end_frame = min(start + seg_frames, total_frames)
+            seg_pcm = pcm[start * 2: end_frame * 2]
+
+            # Build an in-memory WAV for this segment
+            wav_buf = io.BytesIO()
+            wout = wave.open(wav_buf, "wb")
+            wout.setnchannels(1)
+            wout.setsampwidth(2)
+            wout.setframerate(sample_rate)
+            wout.writeframes(seg_pcm)
+            wout.close()
+            wav_buf.seek(0)
+
+            try:
+                rec = vosk.KaldiRecognizer(asr_model, sample_rate)
+                rec.SetSpkModel(spk_model)
+                rec.SetWords(False)
+                CHUNK = 8000
+                wseg = wave.open(wav_buf, "rb")
+                while True:
+                    data = wseg.readframes(CHUNK)
+                    if not data:
+                        break
+                    rec.AcceptWaveform(data)
+                wseg.close()
+                result = json.loads(rec.FinalResult())
+                spk_vec = result.get("spk")
+                if spk_vec and len(spk_vec) == 128:
+                    embeddings.append(spk_vec)
+            except Exception:
+                continue  # skip failed segments
+
+        if not embeddings:
+            print(json.dumps({"error": "no_voice_detected"}))
+            return
+
+        print(json.dumps({"embeddings": embeddings, "count": len(embeddings)}))
+    except Exception as e:
+        print(json.dumps({"error": str(e)}))
+
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print(json.dumps({"error": "usage: vosk_speaker.py extract <wav> | compare <wav> <profiles_json>"}))
+        print(json.dumps({"error": "usage: vosk_speaker.py extract <wav> | compare <wav> <profiles_json> | enroll_multi <wav> [n_segments]"}))
         sys.exit(1)
 
     command = sys.argv[1]
@@ -163,6 +250,9 @@ if __name__ == "__main__":
         profiles_json = sys.argv[3] if len(sys.argv) > 3 else "[]"
         threshold = float(sys.argv[4]) if len(sys.argv) > 4 else 0.85
         cmd_compare(wav_path, profiles_json, threshold)
+    elif command == "enroll_multi":
+        n_seg = int(sys.argv[3]) if len(sys.argv) > 3 else 6
+        cmd_enroll_multi(wav_path, n_seg)
     else:
         print(json.dumps({"error": f"unknown command: {command}"}))
         sys.exit(1)

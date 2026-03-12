@@ -62,6 +62,36 @@ export async function extractEmbedding(audioB64: string): Promise<number[] | nul
 }
 
 /**
+ * Extract multiple speaker embeddings from a long (~30s) enrollment recording.
+ * The Python script splits the audio into N equally-spaced 5s segments and
+ * returns one 128-dim embedding per segment. Returns null on failure.
+ */
+export async function extractMultipleEmbeddings(
+  audioB64: string,
+  nSegments = 6,
+): Promise<number[][] | null> {
+  const wavPath = await writeTempWav(audioB64)
+  try {
+    const { stdout } = await execFileAsync(
+      PYTHON,
+      [SCRIPT, 'enroll_multi', wavPath, String(nSegments)],
+      { timeout: 120_000, maxBuffer: 1024 * 1024 },
+    )
+    const result = JSON.parse(stdout.trim())
+    if (result.error) {
+      console.error('[voskSpeaker] enroll_multi error:', result.error)
+      return null
+    }
+    return result.embeddings as number[][]
+  } catch (err) {
+    console.error('[voskSpeaker] execFile error (enroll_multi):', err)
+    return null
+  } finally {
+    await unlink(wavPath).catch(() => {})
+  }
+}
+
+/**
  * Compare audio against a set of enrolled profiles.
  * Returns "no_enrollment" match (allow-all) if profiles array is empty.
  */
