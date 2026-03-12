@@ -157,6 +157,8 @@ function speakWithSynthesis(text: string, onPlayStart?: () => void): Promise<voi
 // Fallback para browser SpeechSynthesis só ocorre se a API retornar erro HTTP real (não apenas lentidão).
 
 async function speakText(text: string, onPlayStart?: () => void): Promise<void> {
+  // Text-only mode — no TTS, only chat
+  if (typeof localStorage !== 'undefined' && localStorage.getItem('maya_text_only_mode') === 'true') return
   // User has muted MAYA — skip TTS entirely but still allow text responses
   if (_muteGlobal) return
 
@@ -251,6 +253,8 @@ async function speakText(text: string, onPlayStart?: () => void): Promise<void> 
 // Plays a welcome message to warm up the EdgeTTS WebSocket connection on startup.
 // Should be called once after the boot sequence finishes.
 export async function playWelcomeTTS(): Promise<void> {
+  // Text-only mode — skip welcome TTS
+  if (typeof window !== 'undefined' && window.localStorage.getItem('maya_text_only_mode') === 'true') return
   // Mensagem padrão dinâmica: só inclui "diga Maya para ativar" se wake word estiver ativo
   const wakeEnabled = typeof window !== 'undefined'
     ? window.localStorage.getItem('maya_wake_word_enabled') !== 'false'

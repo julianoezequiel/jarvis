@@ -29,12 +29,22 @@ export default function ChatPanel({ alwaysOpen = false }: { alwaysOpen?: boolean
   const [imageMime, setImageMime] = useState<string>('image/png')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [paidKeyActive, setPaidKeyActive] = useState(false)
+  const [textOnly, setTextOnly] = useState(false)
 
   // Escuta o evento de chave paga ativa
   useEffect(() => {
     const handler = () => setPaidKeyActive(true)
     window.addEventListener('maya:paid-key-used', handler)
     return () => window.removeEventListener('maya:paid-key-used', handler)
+  }, [])
+
+  // Text-only mode — hide voice indicators
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    setTextOnly(localStorage.getItem('maya_text_only_mode') === 'true')
+    const handler = () => setTextOnly(localStorage.getItem('maya_text_only_mode') === 'true')
+    window.addEventListener('maya:text-only-changed', handler)
+    return () => window.removeEventListener('maya:text-only-changed', handler)
   }, [])
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -162,14 +172,16 @@ export default function ChatPanel({ alwaysOpen = false }: { alwaysOpen?: boolean
               Terminal
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{
-                fontSize: '10px', padding: '1px 8px', borderRadius: '999px',
-                border: isThinking ? '1px solid rgba(250,204,21,0.5)' : isSpeaking ? '1px solid rgba(74,222,128,0.5)' : !listenEnabled ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(0,212,255,0.2)',
-                color: isThinking ? '#facc15' : isSpeaking ? '#4ade80' : !listenEnabled ? 'rgba(248,113,113,0.6)' : 'rgba(0,212,255,0.4)',
-              }}>
-                {isThinking ? 'pensando...' : isSpeaking ? 'falando' : !listenEnabled ? 'mic off' : status}
-              </span>
-              {isSpeaking && (
+              {!textOnly && (
+                <span style={{
+                  fontSize: '10px', padding: '1px 8px', borderRadius: '999px',
+                  border: isThinking ? '1px solid rgba(250,204,21,0.5)' : isSpeaking ? '1px solid rgba(74,222,128,0.5)' : !listenEnabled ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(0,212,255,0.2)',
+                  color: isThinking ? '#facc15' : isSpeaking ? '#4ade80' : !listenEnabled ? 'rgba(248,113,113,0.6)' : 'rgba(0,212,255,0.4)',
+                }}>
+                  {isThinking ? 'pensando...' : isSpeaking ? 'falando' : !listenEnabled ? 'mic off' : status}
+                </span>
+              )}
+              {!textOnly && isSpeaking && (
                 <button onClick={stopAudio} style={{ fontSize: '11px', padding: '1px 8px', borderRadius: '999px', border: '1px solid rgba(239,68,68,0.6)', color: '#f87171', background: 'none', cursor: 'pointer' }}>
                   ⏸ parar
                 </button>

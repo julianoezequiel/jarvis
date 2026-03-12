@@ -23,6 +23,7 @@ export default function MayaCockpit() {
   const [leftOpen, setLeftOpen] = useState(false)
   const [winWidth, setWinWidth] = useState(1400)
   const [enrollFlow, setEnrollFlow] = useState<{ active: boolean; suggestedName: string }>({ active: false, suggestedName: '' })
+  const [textOnly, setTextOnly] = useState(false)
   const { agentStates } = useAgentOrchestrator()
 
   // Responsive width tracking
@@ -31,6 +32,15 @@ export default function MayaCockpit() {
     update()
     window.addEventListener('resize', update)
     return () => window.removeEventListener('resize', update)
+  }, [])
+
+  // Text-only mode — read on mount and update live from Settings
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    setTextOnly(localStorage.getItem('maya_text_only_mode') === 'true')
+    const handler = () => setTextOnly(localStorage.getItem('maya_text_only_mode') === 'true')
+    window.addEventListener('maya:text-only-changed', handler)
+    return () => window.removeEventListener('maya:text-only-changed', handler)
   }, [])
 
   // Breakpoints
@@ -43,6 +53,8 @@ export default function MayaCockpit() {
   const orbSize = Math.round(400 * orbScale)
 
   useEffect(() => {
+    // Text-only mode: skip mic initialization entirely
+    if (textOnly) return
     // Solicita permissão do microfone imediatamente ao carregar a tela.
     // O browser exibe o popup nativo; não bloqueia o boot.
     navigator.mediaDevices?.getUserMedia({ audio: true })
@@ -53,7 +65,7 @@ export default function MayaCockpit() {
       .catch((e) => {
         console.warn('[maya] mic permission denied or unavailable:', e)
       })
-  }, [])
+  }, [textOnly])
 
   useEffect(() => {
     const handler = () => setRightTab('docs')
@@ -98,7 +110,7 @@ export default function MayaCockpit() {
       <StatusBar showSettings={showSettings} setShowSettings={setShowSettings} />
 
       {phase === 'booting' && (
-        <BootSequence onDone={() => setPhase('ready')} />
+        <BootSequence onDone={() => setPhase('ready')} textOnly={textOnly} />
       )}
 
       {/* Orbe — sempre fixo no centro exato do viewport, independente do layout */}
@@ -117,7 +129,7 @@ export default function MayaCockpit() {
           justifyContent: 'center',
         }}>
           <HexGrid />
-          {!showSettings && <CentralOrb />}
+          {!showSettings && !textOnly && <CentralOrb />
         </div>
       )}
 
@@ -277,7 +289,7 @@ export default function MayaCockpit() {
           </div>
         </div>
       ))}
-    <SpeechCaption />
+    {!textOnly && <SpeechCaption />}
 
     {/* Voice enrollment modal */}
     {enrollFlow.active && (

@@ -53,6 +53,7 @@ export default function SettingsPanel() {
   const [conversationTimeout, setConversationTimeout] = useState(60)
   const [deletingProfile, setDeletingProfile] = useState<string | null>(null)
   const [verifyThreshold, setVerifyThreshold] = useState(0.70)
+  const [textOnlyMode, setTextOnlyMode] = useState(false)
 
   const loadProfiles = useCallback(async () => {
     setProfilesLoading(true)
@@ -100,6 +101,12 @@ export default function SettingsPanel() {
     localStorage.setItem('maya_verify_threshold', String(value))
   }
 
+  const handleToggleTextOnly = (enabled: boolean) => {
+    setTextOnlyMode(enabled)
+    localStorage.setItem('maya_text_only_mode', enabled ? 'true' : 'false')
+    window.dispatchEvent(new CustomEvent('maya:text-only-changed', { detail: { enabled } }))
+  }
+
   const handleOpenEnrollModal = () => {
     window.dispatchEvent(new CustomEvent('maya:enroll-intent', { detail: { suggestedName: '' } }))
     window.dispatchEvent(new CustomEvent('closeSettingsModal'))
@@ -133,6 +140,7 @@ export default function SettingsPanel() {
     if (storedConvTimeout) setConversationTimeout(parseInt(storedConvTimeout, 10))
     const storedThreshold = localStorage.getItem('maya_verify_threshold')
     if (storedThreshold) setVerifyThreshold(parseFloat(storedThreshold))
+    setTextOnlyMode(localStorage.getItem('maya_text_only_mode') === 'true')
     void loadProfiles()
   }, [])
 
@@ -382,21 +390,56 @@ export default function SettingsPanel() {
 
         {/* ── Voice Profiles section ─────────────────────────────────────── */}
         <div style={{ borderTop: '1px solid rgba(0,212,255,0.1)', paddingTop: '20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+          {/* Text-only mode toggle — prominent, affects entire voice subsystem */}
+          <label style={{
+            display: 'flex', alignItems: 'flex-start', gap: 10,
+            padding: '10px 12px', borderRadius: 8,
+            background: textOnlyMode ? 'rgba(0,212,255,0.06)' : 'rgba(0,0,0,0.3)',
+            border: textOnlyMode ? '1px solid rgba(0,212,255,0.35)' : '1px solid rgba(0,212,255,0.12)',
+            cursor: 'pointer', transition: 'all 0.2s',
+          }}>
+            <input
+              type="checkbox"
+              checked={textOnlyMode}
+              onChange={e => handleToggleTextOnly(e.target.checked)}
+              style={{ width: 14, height: 14, accentColor: '#00d4ff', marginTop: 2, cursor: 'pointer' }}
+            />
+            <span>
+              <span style={{ fontSize: '12px', color: '#00d4ff', fontWeight: 600 }}>
+                Modo somente texto
+              </span>
+              <br />
+              <span style={{ fontSize: '10px', color: 'rgba(0,212,255,0.5)', lineHeight: 1.5 }}>
+                {textOnlyMode
+                  ? 'Ativo — microfone e TTS desabilitados. Somente chat de texto.'
+                  : 'Desabilitado — microfone e TTS funcionam normalmente.'}
+              </span>
+            </span>
+          </label>
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(0,212,255,0.45)' }}>
+            <span style={{ fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: textOnlyMode ? 'rgba(0,212,255,0.2)' : 'rgba(0,212,255,0.45)' }}>
               🎙 Identificação de Voz
             </span>
             <button
               onClick={handleOpenEnrollModal}
+              disabled={textOnlyMode}
               style={{
                 fontSize: '11px', fontFamily: 'Share Tech Mono, monospace',
                 background: 'rgba(0,212,255,0.08)', border: '1px solid rgba(0,212,255,0.3)',
-                color: '#00d4ff', borderRadius: 6, padding: '5px 14px', cursor: 'pointer',
+                color: textOnlyMode ? 'rgba(0,212,255,0.25)' : '#00d4ff',
+                borderRadius: 6, padding: '5px 14px',
+                cursor: textOnlyMode ? 'not-allowed' : 'pointer',
+                opacity: textOnlyMode ? 0.5 : 1,
               }}
             >
               + Cadastrar nova voz
             </button>
           </div>
+
+          {/* Voice sub-settings — dimmed/non-interactive in text-only mode */}
+          <div style={{ opacity: textOnlyMode ? 0.3 : 1, pointerEvents: textOnlyMode ? 'none' : 'auto', transition: 'opacity 0.2s', display: 'flex', flexDirection: 'column', gap: 14 }}>
 
           {/* Threshold slider */}
           {verifyEnabled && profiles.length > 0 && (
@@ -559,6 +602,8 @@ export default function SettingsPanel() {
               ))}
             </div>
           )}
+
+          </div>{/* end voice sub-settings dim wrapper */}
         </div>
 
         {/* Footer: Save */}
