@@ -20,7 +20,7 @@ const SCRIPT = path.join(process.cwd(), 'src', 'scripts', 'vosk_speaker.py')
 
 export interface VoiceProfile {
   name: string
-  voiceprint: number[]   // 128-dim embedding
+  voiceprints: number[][]  // multiple 128-dim embeddings (multi-sample)
 }
 
 export interface VerifyResult {

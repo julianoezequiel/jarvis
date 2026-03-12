@@ -48,10 +48,22 @@ export async function POST(req: NextRequest) {
     .map((row: { fact: string }) => {
       try {
         const p = JSON.parse(row.fact)
-        if (p.name && Array.isArray(p.voiceprint) && p.voiceprint.length === 128) {
-          return { name: p.name as string, voiceprint: p.voiceprint as number[] }
+        if (!p.name) return null
+        // Multi-sample format (new)
+        const voiceprints: number[][] = []
+        if (Array.isArray(p.voiceprints)) {
+          voiceprints.push(
+            ...(p.voiceprints as unknown[]).filter(
+              (v): v is number[] => Array.isArray(v) && v.length === 128
+            )
+          )
         }
-        return null
+        // Legacy single-sample format (backward compat)
+        if (Array.isArray(p.voiceprint) && p.voiceprint.length === 128) {
+          voiceprints.push(p.voiceprint as number[])
+        }
+        if (voiceprints.length === 0) return null
+        return { name: p.name as string, voiceprints }
       } catch {
         return null
       }

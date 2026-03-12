@@ -122,13 +122,22 @@ def cmd_compare(wav_path: str, profiles_json: str, threshold: float = 0.85):
         best_name = ""
         best_conf = 0.0
         for p in profiles:
-            voiceprint = p.get("voiceprint") or []
-            if len(voiceprint) != 128:
-                continue
-            sim = cosine_similarity(embedding, voiceprint)
-            if sim > best_conf:
-                best_conf = sim
-                best_name = p.get("name", "")
+            # Support multi-sample format (voiceprints: list of embeddings)
+            # and legacy single-sample format (voiceprint: single embedding)
+            samples = p.get("voiceprints") or []
+            if not samples:
+                single = p.get("voiceprint") or []
+                if len(single) == 128:
+                    samples = [single]
+
+            for sample in samples:
+                if len(sample) != 128:
+                    continue
+                sim = cosine_similarity(embedding, sample)
+                # Take the BEST match across all stored samples for this person
+                if sim > best_conf:
+                    best_conf = sim
+                    best_name = p.get("name", "")
 
         match = best_conf >= threshold
         print(json.dumps({

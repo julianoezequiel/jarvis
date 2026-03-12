@@ -46,7 +46,7 @@ export default function SettingsPanel() {
   const [cleared, setCleared] = useState(false)
 
   // ── Voice Profiles state ────────────────────────────────────────────────
-  const [profiles, setProfiles] = useState<{ id: string; name: string; enrolledAt: string }[]>([])
+  const [profiles, setProfiles] = useState<{ id: string; name: string; enrolledAt: string; samplesCount: number }[]>([])
   const [profilesLoading, setProfilesLoading] = useState(false)
   const [verifyEnabled, setVerifyEnabled] = useState(false)
   const [wakeWordEnabled, setWakeWordEnabled] = useState(true)
@@ -509,14 +509,25 @@ export default function SettingsPanel() {
                   <span style={{ fontSize: '13px', color: '#e2e8f0', fontFamily: 'Orbitron, sans-serif', fontWeight: 700 }}>
                     {p.name}
                   </span>
+                  {/* Sample count badge */}
+                  <span title={`${p.samplesCount} amostra(s) gravada(s). Recomendado: 3 ou mais.`} style={{
+                    fontSize: '9px', fontWeight: 700,
+                    color: p.samplesCount >= 3 ? '#00ff88' : '#fbbf24',
+                    background: p.samplesCount >= 3 ? 'rgba(0,255,136,0.10)' : 'rgba(251,191,36,0.12)',
+                    border: `1px solid ${p.samplesCount >= 3 ? 'rgba(0,255,136,0.3)' : 'rgba(251,191,36,0.35)'}`,
+                    borderRadius: 4, padding: '1px 5px',
+                  }}>
+                    {p.samplesCount} {p.samplesCount === 1 ? 'amostra' : 'amostras'}
+                  </span>
                   <span style={{ fontSize: '9px', color: 'rgba(0,212,255,0.4)' }}>
                     {new Date(p.enrolledAt).toLocaleDateString('pt-BR')}
                   </span>
                   <button
                     onClick={() => handleUpdateProfile(p.name)}
-                    title={`Regravar voz de "${p.name}"`}
+                    title={p.samplesCount < 3 ? `Adicionar amostra — recomendado ter 3+ para maior precisão` : `Regravar voz de "${p.name}"`}
                     style={{
-                      background: 'none', border: 'none', color: 'rgba(0,212,255,0.6)',
+                      background: 'none', border: 'none',
+                      color: p.samplesCount < 3 ? '#fbbf24' : 'rgba(0,212,255,0.6)',
                       cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: '0 2px',
                     }}
                   >

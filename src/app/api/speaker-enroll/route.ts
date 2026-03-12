@@ -47,13 +47,42 @@ export async function POST(req: NextRequest) {
     return jsonErr('No voice detected in the audio clip. Please speak clearly for at least 3 seconds.', 422)
   }
 
-  // Upsert: delete any existing profile for this name, then insert fresh
-  const fact = JSON.stringify({ name: cleanName, voiceprint: embedding })
-
   try {
+    // Fetch any existing samples for this name (case-insensitive match)
+    const existing = await db.select<{ fact: string }>('user_facts', {
+      columns: 'fact',
+      filters: [
+        { column: 'category', op: 'eq', value: CATEGORY },
+        { column: 'fact', op: 'ilike', value: `%"name":"${cleanName}"%` },
+      ],
+    })
+
+    const existingVoiceprints: number[][] = []
+    for (const row of existing) {
+      try {
+        const p = JSON.parse(row.fact)
+        if (Array.isArray(p.voiceprints)) {
+          existingVoiceprints.push(
+            ...(p.voiceprints as unknown[]).filter(
+              (v): v is number[] => Array.isArray(v) && v.length === 128
+            )
+          )
+        } else if (Array.isArray(p.voiceprint) && p.voiceprint.length === 128) {
+          // Migrate legacy single-sample format
+          existingVoiceprints.push(p.voiceprint as number[])
+        }
+      } catch { /* skip malformed rows */ }
+    }
+
+    // Keep up to 4 existing + 1 new = max 5 samples total
+    const MAX_SAMPLES = 5
+    const voiceprints = [...existingVoiceprints, embedding].slice(-MAX_SAMPLES)
+    const fact = JSON.stringify({ name: cleanName, voiceprints })
+
+    // Remove all old records for this name, then insert the merged record
     await db.delete('user_facts', [
       { column: 'category', op: 'eq', value: CATEGORY },
-      { column: 'fact', op: 'like', value: `%"name":"${cleanName}"%` },
+      { column: 'fact', op: 'ilike', value: `%"name":"${cleanName}"%` },
     ])
     await db.insert('user_facts', {
       fact,
@@ -61,12 +90,12 @@ export async function POST(req: NextRequest) {
       importance: 5,
       source: 'speaker-enroll',
     })
+
+    return NextResponse.json({ ok: true, name: cleanName, samplesCount: voiceprints.length })
   } catch (err) {
     console.error('[speaker-enroll] DB error:', err)
     return jsonErr('Failed to save voice profile', 500)
   }
-
-  return NextResponse.json({ ok: true, name: cleanName })
 }
 
 // ── GET — list profiles ───────────────────────────────────────────────────────
@@ -86,7 +115,10 @@ export async function GET() {
   const profiles = rows.map((row) => {
     try {
       const parsed = JSON.parse(row.fact)
-      return { id: row.id, name: parsed.name as string, enrolledAt: row.created_at }
+      const samplesCount = Array.isArray(parsed.voiceprints)
+        ? (parsed.voiceprints as unknown[]).length
+        : 1
+      return { id: row.id, name: parsed.name as string, enrolledAt: row.created_at, samplesCount }
     } catch {
       return null
     }
@@ -113,7 +145,7 @@ export async function DELETE(req: NextRequest) {
   try {
     await db.delete('user_facts', [
       { column: 'category', op: 'eq', value: CATEGORY },
-      { column: 'fact', op: 'like', value: `%"name":"${name.trim()}"%` },
+      { column: 'fact', op: 'ilike', value: `%"name":"${name.trim()}"%` },
     ])
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
