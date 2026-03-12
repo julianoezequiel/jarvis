@@ -269,14 +269,24 @@ function drawOrb(ctx: CanvasRenderingContext2D, t: number, opts: OrbOpts, angles
   drawLabel(ctx, opts.label, opts.color)
 }
 
+function getInitialOrbState(): string {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage.getItem('maya_wake_word_enabled') !== 'false')
+      return 'standby'
+  } catch (_) {}
+  return 'idle'
+}
+
 export default function CentralOrb() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const stateRef = useRef<string>('idle')
+  const stateRef = useRef<string>(getInitialOrbState())
   const animRef = useRef<number | null>(null)
   const mutedRef = useRef<boolean>(false)
   const [isMuted, setIsMuted] = useState(false)
   // Lerped opts (smooth transitions) and accumulated ring angles (no position jumps)
-  const lerpRef = useRef<LerpOpts>({ cr:0, cg:212, cb:255, label:'ESCUTANDO', speed:1.20, amplitude:6, glow:0.80, pulse:0 })
+  const _initState = getInitialOrbState()
+  const _initOpts = targetOpts(_initState, false)
+  const lerpRef = useRef<LerpOpts>({ ..._initOpts })
   const ringAnglesRef = useRef<number[]>(ORBITS.map(o => o.initAngle))
 
   const toggleMute = useCallback(() => {
