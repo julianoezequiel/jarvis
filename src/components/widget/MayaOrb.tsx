@@ -48,7 +48,10 @@ export default function MayaOrb({
   onToggle,
   orbSize = 72,
 }: MayaOrbProps) {
-  const [coords, setCoords] = useState(() => initialCoords(position, orbSize))
+  // Defer computing dynamic, window-dependent coordinates until the component
+  // is mounted on the client to avoid SSR/client hydration mismatches.
+  const [coords, setCoords] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const [mounted, setMounted] = useState(false)
 
   const isDragging     = useRef(false)
   const hasDragged     = useRef(false)
@@ -100,6 +103,15 @@ export default function MayaOrb({
     return () => window.removeEventListener('resize', onResize)
   }, [orbSize])
 
+  // Initialize coords on client mount (only). This ensures server HTML is
+  // deterministic and avoids hydration mismatches caused by window-dependent
+  // calculations during SSR.
+  useEffect(() => {
+    setMounted(true)
+    setCoords(initialCoords(position, orbSize))
+    // Recompute when position or orbSize change on client
+  }, [position, orbSize])
+
   const handleClick = useCallback(() => {
     if (!hasDragged.current) onToggle()
   }, [onToggle])
@@ -109,6 +121,12 @@ export default function MayaOrb({
 
   // ── Active glow color from theme (defaults to Maya cyan) ──────────────────
   const glowColor = orbConfig.theme?.primaryColor ?? '#00d4ff'
+
+  if (!mounted) {
+    // Render nothing on the server / before client mount to avoid
+    // any differences between SSR and client-side computed styles.
+    return null
+  }
 
   return (
     <div
