@@ -8,6 +8,7 @@ export default function SpeechCaption() {
   const [text, setText] = useState('')
   const [visible, setVisible] = useState(false)
   const [isFinal, setIsFinal] = useState(false)
+  const [isDenied, setIsDenied] = useState(false)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -22,6 +23,7 @@ export default function SpeechCaption() {
       setText(t.trim())
       setVisible(true)
       setIsFinal(false)
+      setIsDenied(false)
     }
 
     const onFinal = (ev: Event) => {
@@ -31,20 +33,39 @@ export default function SpeechCaption() {
         setText(t.trim())
         setVisible(true)
         setIsFinal(true)
+        setIsDenied(false)
       }
       // Hide 2.5s after last final event
       hideTimer.current = setTimeout(() => {
         setVisible(false)
         setText('')
         setIsFinal(false)
+        setIsDenied(false)
       }, 2500)
+    }
+
+    const onDenied = () => {
+      clearHide()
+      setText('Voz não reconhecida — acesso negado')
+      setVisible(true)
+      setIsFinal(true)
+      setIsDenied(true)
+      // Hide after 3.5s
+      hideTimer.current = setTimeout(() => {
+        setVisible(false)
+        setText('')
+        setIsFinal(false)
+        setIsDenied(false)
+      }, 3500)
     }
 
     window.addEventListener('maya:speech-partial', onPartial)
     window.addEventListener('maya:speech', onFinal)
+    window.addEventListener('maya:speech-denied', onDenied)
     return () => {
       window.removeEventListener('maya:speech-partial', onPartial)
       window.removeEventListener('maya:speech', onFinal)
+      window.removeEventListener('maya:speech-denied', onDenied)
       clearHide()
     }
   }, [])
@@ -73,12 +94,12 @@ export default function SpeechCaption() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <div style={{
             width: '6px', height: '6px', borderRadius: '50%',
-            background: isFinal ? '#00ff88' : '#00d4ff',
-            boxShadow: isFinal ? '0 0 6px #00ff88' : '0 0 6px #00d4ff',
+            background: isDenied ? '#ff4444' : isFinal ? '#00ff88' : '#00d4ff',
+            boxShadow: isDenied ? '0 0 6px #ff4444' : isFinal ? '0 0 6px #00ff88' : '0 0 6px #00d4ff',
             animation: isFinal ? 'none' : 'pulse 0.8s ease-in-out infinite',
           }} />
-          <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', color: isFinal ? 'rgba(0,255,136,0.7)' : 'rgba(0,212,255,0.7)', textTransform: 'uppercase', fontFamily: 'Orbitron, monospace' }}>
-            {isFinal ? 'RECEBIDO' : 'ESCUTANDO'}
+          <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', color: isDenied ? 'rgba(255,68,68,0.9)' : isFinal ? 'rgba(0,255,136,0.7)' : 'rgba(0,212,255,0.7)', textTransform: 'uppercase', fontFamily: 'Orbitron, monospace' }}>
+            {isDenied ? 'ACESSO NEGADO' : isFinal ? 'RECEBIDO' : 'ESCUTANDO'}
           </span>
         </div>
 
@@ -90,8 +111,8 @@ export default function SpeechCaption() {
           margin: 0,
           whiteSpace: 'nowrap',
           overflow: 'hidden',
-          color: isFinal ? '#00ff88' : 'rgba(255,255,255,0.90)',
-          textShadow: isFinal ? '0 0 10px rgba(0,255,136,0.4)' : 'none',
+          color: isDenied ? '#ff6666' : isFinal ? '#00ff88' : 'rgba(255,255,255,0.90)',
+          textShadow: isDenied ? '0 0 10px rgba(255,68,68,0.5)' : isFinal ? '0 0 10px rgba(0,255,136,0.4)' : 'none',
           transition: 'color 0.3s ease, text-shadow 0.3s ease',
         }}>
           {display}

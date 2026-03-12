@@ -666,12 +666,25 @@ export function useMayaChat() {
               body: JSON.stringify({ audioB64, threshold }),
             })
             const result = await res.json()
-            if (result.reason !== 'no_enrollment') {
-              speakerPrefix = result.speaker
-                ? `[Falante: ${result.speaker}] `
-                : `[Falante não reconhecido] `
-              console.log(`[maya:speech] verification: match=${result.match}, speaker=${result.speaker}, conf=${result.confidence}`)
+            console.log(`[maya:speech] verification: match=${result.match}, speaker=${result.speaker}, conf=${result.confidence}, reason=${result.reason}`)
+
+            if (result.reason === 'compared') {
+              if (result.match) {
+                // Falante reconhecido — adiciona prefixo com o nome
+                speakerPrefix = `[Falante: ${result.speaker}] `
+              } else {
+                // Falante NÃO reconhecido — bloqueia a mensagem
+                console.log(`[maya:speech] BLOQUEADO — falante não reconhecido (confiança=${result.confidence}, threshold=${threshold})`)
+                setStatus('idle')
+                window.dispatchEvent(new CustomEvent('maya:speech-denied', {
+                  detail: { confidence: result.confidence, threshold },
+                }))
+                void speakText('Desculpe, não reconheci sua voz. Acesso negado.')
+                return // não envia para o LLM
+              }
             }
+            // reason === 'no_enrollment': acesso livre (nenhum perfil cadastrado)
+            // reason === 'no_voice_detected' | 'error': fail-open (não bloqueia)
           } catch (err) {
             console.warn('[maya:speech] verification failed (fail open):', err)
           }
