@@ -10,6 +10,7 @@ import DeliveriesPanel from './DeliveriesPanel'
 import SpeechCaption from './SpeechCaption'
 import { useAgentOrchestrator } from '../../hooks/useAgentOrchestrator'
 import { playWelcomeTTS } from '../../hooks/useMayaChat'
+import { initLogger } from '../../lib/mayaLogger'
 
 type Phase = 'booting' | 'ready'
 
@@ -18,6 +19,9 @@ export default function MayaCockpit() {
   const [showSettings, setShowSettings] = useState(false)
   const [rightTab, setRightTab] = useState<'agents' | 'docs'>('agents')
   const { agentStates } = useAgentOrchestrator()
+
+  // Inicializa o coletor de logs (Ctrl+Shift+L para baixar como .txt)
+  useEffect(() => { initLogger() }, [])
 
   useEffect(() => {
     const handler = () => setRightTab('docs')
