@@ -220,7 +220,7 @@ async function speakText(text: string, onPlayStart?: () => void): Promise<void> 
 // Plays a welcome message to warm up the EdgeTTS WebSocket connection on startup.
 // Should be called once after the boot sequence finishes.
 export async function playWelcomeTTS(): Promise<void> {
-  let welcomeText = 'Sistemas online, Sir. Aguardando seu comando — diga Maya para ativar.'
+  let welcomeText = 'Sistemas online. Aguardando seu comando — diga Maya para ativar.'
   try {
     const raw = typeof window !== 'undefined' ? window.localStorage.getItem('maya_settings') : null
     if (raw) {
