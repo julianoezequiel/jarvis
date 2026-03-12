@@ -29,7 +29,13 @@ export default function ChatPanel({ alwaysOpen = false }: { alwaysOpen?: boolean
   const [imageMime, setImageMime] = useState<string>('image/png')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [paidKeyActive, setPaidKeyActive] = useState(false)
-  const [textOnly, setTextOnly] = useState(false)
+  // Lazy init — reads localStorage on first render to avoid async state race
+  const [noTts, setNoTts] = useState(() =>
+    typeof window !== 'undefined' ? localStorage.getItem('maya_text_only_mode') === 'true' : false
+  )
+  const [noMic, setNoMic] = useState(() =>
+    typeof window !== 'undefined' ? localStorage.getItem('maya_no_mic_mode') === 'true' : false
+  )
 
   // Escuta o evento de chave paga ativa
   useEffect(() => {
@@ -41,10 +47,14 @@ export default function ChatPanel({ alwaysOpen = false }: { alwaysOpen?: boolean
   // Text-only mode — hide voice indicators
   useEffect(() => {
     if (typeof window === 'undefined') return
-    setTextOnly(localStorage.getItem('maya_text_only_mode') === 'true')
-    const handler = () => setTextOnly(localStorage.getItem('maya_text_only_mode') === 'true')
-    window.addEventListener('maya:text-only-changed', handler)
-    return () => window.removeEventListener('maya:text-only-changed', handler)
+    const onTtsChange = () => setNoTts(localStorage.getItem('maya_text_only_mode') === 'true')
+    const onMicChange = () => setNoMic(localStorage.getItem('maya_no_mic_mode') === 'true')
+    window.addEventListener('maya:text-only-changed', onTtsChange)
+    window.addEventListener('maya:no-mic-changed', onMicChange)
+    return () => {
+      window.removeEventListener('maya:text-only-changed', onTtsChange)
+      window.removeEventListener('maya:no-mic-changed', onMicChange)
+    }
   }, [])
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -172,16 +182,17 @@ export default function ChatPanel({ alwaysOpen = false }: { alwaysOpen?: boolean
               Terminal
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {!textOnly && (
-                <span style={{
-                  fontSize: '10px', padding: '1px 8px', borderRadius: '999px',
-                  border: isThinking ? '1px solid rgba(250,204,21,0.5)' : isSpeaking ? '1px solid rgba(74,222,128,0.5)' : !listenEnabled ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(0,212,255,0.2)',
-                  color: isThinking ? '#facc15' : isSpeaking ? '#4ade80' : !listenEnabled ? 'rgba(248,113,113,0.6)' : 'rgba(0,212,255,0.4)',
-                }}>
-                  {isThinking ? 'pensando...' : isSpeaking ? 'falando' : !listenEnabled ? 'mic off' : status}
-                </span>
-              )}
-              {!textOnly && isSpeaking && (
+              <span style={{
+                fontSize: '10px', padding: '1px 8px', borderRadius: '999px',
+                border: isThinking ? '1px solid rgba(250,204,21,0.5)' : (!noTts && isSpeaking) ? '1px solid rgba(74,222,128,0.5)' : (!noMic && !listenEnabled) ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(0,212,255,0.2)',
+                color: isThinking ? '#facc15' : (!noTts && isSpeaking) ? '#4ade80' : (!noMic && !listenEnabled) ? 'rgba(248,113,113,0.6)' : 'rgba(0,212,255,0.4)',
+              }}>
+                {isThinking ? 'pensando...'
+                  : (!noTts && isSpeaking) ? 'falando'
+                  : (!noMic && !listenEnabled) ? 'mic off'
+                  : status}
+              </span>
+              {!noTts && isSpeaking && (
                 <button onClick={stopAudio} style={{ fontSize: '11px', padding: '1px 8px', borderRadius: '999px', border: '1px solid rgba(239,68,68,0.6)', color: '#f87171', background: 'none', cursor: 'pointer' }}>
                   ⏸ parar
                 </button>

@@ -23,7 +23,10 @@ export default function MayaCockpit() {
   const [leftOpen, setLeftOpen] = useState(false)
   const [winWidth, setWinWidth] = useState(1400)
   const [enrollFlow, setEnrollFlow] = useState<{ active: boolean; suggestedName: string }>({ active: false, suggestedName: '' })
-  const [textOnly, setTextOnly] = useState(false)
+  // Lazy init reads localStorage on first render — avoids race condition with mic init effect
+  const [noMic, setNoMic] = useState(() =>
+    typeof window !== 'undefined' ? localStorage.getItem('maya_no_mic_mode') === 'true' : false
+  )
   const { agentStates } = useAgentOrchestrator()
 
   // Responsive width tracking
@@ -34,13 +37,12 @@ export default function MayaCockpit() {
     return () => window.removeEventListener('resize', update)
   }, [])
 
-  // Text-only mode — read on mount and update live from Settings
+  // No-mic mode — live update from Settings (initial value already set via lazy useState above)
   useEffect(() => {
     if (typeof window === 'undefined') return
-    setTextOnly(localStorage.getItem('maya_text_only_mode') === 'true')
-    const handler = () => setTextOnly(localStorage.getItem('maya_text_only_mode') === 'true')
-    window.addEventListener('maya:text-only-changed', handler)
-    return () => window.removeEventListener('maya:text-only-changed', handler)
+    const handler = () => setNoMic(localStorage.getItem('maya_no_mic_mode') === 'true')
+    window.addEventListener('maya:no-mic-changed', handler)
+    return () => window.removeEventListener('maya:no-mic-changed', handler)
   }, [])
 
   // Breakpoints
@@ -53,8 +55,8 @@ export default function MayaCockpit() {
   const orbSize = Math.round(400 * orbScale)
 
   useEffect(() => {
-    // Text-only mode: skip mic initialization entirely
-    if (textOnly) return
+    // No-mic mode: skip mic initialization entirely (noMic is lazy-init'd so value is correct on first run)
+    if (noMic) return
     // Solicita permissão do microfone imediatamente ao carregar a tela.
     // O browser exibe o popup nativo; não bloqueia o boot.
     navigator.mediaDevices?.getUserMedia({ audio: true })
@@ -65,7 +67,7 @@ export default function MayaCockpit() {
       .catch((e) => {
         console.warn('[maya] mic permission denied or unavailable:', e)
       })
-  }, [textOnly])
+  }, [noMic])
 
   useEffect(() => {
     const handler = () => setRightTab('docs')
@@ -110,7 +112,7 @@ export default function MayaCockpit() {
       <StatusBar showSettings={showSettings} setShowSettings={setShowSettings} />
 
       {phase === 'booting' && (
-        <BootSequence onDone={() => setPhase('ready')} textOnly={textOnly} />
+        <BootSequence onDone={() => setPhase('ready')} noMic={noMic} />
       )}
 
       {/* Orbe — sempre fixo no centro exato do viewport, independente do layout */}
@@ -129,7 +131,7 @@ export default function MayaCockpit() {
           justifyContent: 'center',
         }}>
           <HexGrid />
-          {!showSettings && !textOnly && <CentralOrb />
+          {!showSettings && !noMic && <CentralOrb />}
         </div>
       )}
 
@@ -289,7 +291,7 @@ export default function MayaCockpit() {
           </div>
         </div>
       ))}
-    {!textOnly && <SpeechCaption />}
+    {!noMic && <SpeechCaption />}
 
     {/* Voice enrollment modal */}
     {enrollFlow.active && (

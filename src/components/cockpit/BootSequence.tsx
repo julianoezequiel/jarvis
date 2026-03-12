@@ -1,7 +1,7 @@
 "use client"
 import React, { useEffect, useState } from 'react'
 
-export default function BootSequence({ onDone, textOnly = false }: { onDone: () => void; textOnly?: boolean }) {
+export default function BootSequence({ onDone, noMic = false }: { onDone: () => void; noMic?: boolean }) {
   const [progress, setProgress] = useState(0)
   const lines = ['Initializing core', 'Loading agents', 'Starting services', 'Finalizing']
   const [activeLine, setActiveLine] = useState(0)
@@ -18,14 +18,14 @@ export default function BootSequence({ onDone, textOnly = false }: { onDone: () 
       if (elapsed >= total) {
         clearInterval(id)        // Iniciar microfone automaticamente antes de transitar para ready
         try {
-          if (!textOnly && typeof window !== 'undefined') {
+          if (!noMic && typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('maya:init-mic'))
           }
         } catch (_) {}        setTimeout(onDone, 250)
       }
     }, step)
     return () => clearInterval(id)
-  }, [onDone, textOnly])
+  }, [onDone, noMic])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90">
