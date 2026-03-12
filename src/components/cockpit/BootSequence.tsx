@@ -16,8 +16,12 @@ export default function BootSequence({ onDone }: { onDone: () => void }) {
       const lineIdx = Math.min(lines.length - 1, Math.floor((elapsed / total) * lines.length))
       setActiveLine(lineIdx)
       if (elapsed >= total) {
-        clearInterval(id)
-        setTimeout(onDone, 250)
+        clearInterval(id)        // Iniciar microfone automaticamente antes de transitar para ready
+        try {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('maya:init-mic'))
+          }
+        } catch (_) {}        setTimeout(onDone, 250)
       }
     }, step)
     return () => clearInterval(id)

@@ -18,10 +18,10 @@ async function saveFactFromMessage(text: string): Promise<boolean> {
   }
 }
 
-export default function ChatPanel() {
+export default function ChatPanel({ alwaysOpen = false }: { alwaysOpen?: boolean }) {
   const { messages, status, listenEnabled, setListen, sendMessage, addUserMessage, stopAudio } = useMayaChat()
   const [text, setText] = useState('')
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(alwaysOpen)
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set())
   const [pinningId, setPinningId] = useState<string | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)

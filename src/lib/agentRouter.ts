@@ -8,6 +8,7 @@ export interface DelegateCommand {
   task: string
   context?: string
   priority?: 'low' | 'normal' | 'high'
+  delivery?: 'chat' | 'file'  // 'chat' = mostra inline no chat; 'file' = salva para download
 }
 
 export interface ExecuteCommand {

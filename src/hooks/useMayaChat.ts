@@ -3,11 +3,63 @@ import { stripProtocols } from '../lib/agentRouter'
 
 export type ChatMessage = { id: string; role: 'user' | 'assistant' | 'system'; text: string }
 
+// Remove marcações Markdown do texto antes de enviar ao TTS
+// O chat continua exibindo a formatação — só o áudio recebe texto limpo
+function stripMarkdownForTTS(text: string): string {
+  return text
+    // Blocos de código: ```...``` e `code` → só o conteúdo (sem backticks)
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    // Cabeçalhos: # Título → Título
+    .replace(/^#{1,6}\s+/gm, '')
+    // Negrito/itálico: **texto**, __texto__, *texto*, _texto_
+    .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
+    .replace(/_{1,3}([^_]+)_{1,3}/g, '$1')
+    // Links: [texto](url) → texto
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    // Imagens: ![alt](url) → alt
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    // Tabelas: linhas com | → remove pipes, mantém conteúdo
+    .replace(/^\|.*\|$/gm, line => line.replace(/\|/g, ' ').replace(/\s{2,}/g, ' ').trim())
+    // Linhas de separação de tabela (|---|---|)
+    .replace(/^\s*[\|]?[\s\-:]+[\|][\s\-:|]*$/gm, '')
+    // Separadores: --- ou *** ou ___
+    .replace(/^[\-*_]{3,}\s*$/gm, '')
+    // Blockquote: > texto → texto
+    .replace(/^>\s*/gm, '')
+    // Bullets: - item, * item, + item → item
+    .replace(/^[\-*+]\s+/gm, '')
+    // Listas numeradas: 1. item → item
+    .replace(/^\d+\.\s+/gm, '')
+    // Emojis de status comuns que ficam estranhos na voz
+    .replace(/✅|❌|⚠️|🔴|🟢|🟡|📌|💡|🚀|⭐|🎯|📊|🔧|💬|📝|🎉|👉|ℹ️|➡️/g, '')
+    // Múltiplas quebras de linha → espaço
+    .replace(/\n{2,}/g, ' ')
+    .replace(/\n/g, ' ')
+    // Espaços duplicados
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
 // ─── Audio singleton ────────────────────────────────────────────────────────
 // One shared token per "generation". Each new speakText call gets a new token;
 // the previous generation sees the token is stale and stops itself.
 let _speakGeneration = 0
 let _activeAudio: HTMLAudioElement | null = null
+// Tracks which generation "owns" __mayaSpeaking.
+// Prevents stale finally blocks from overwriting the flag of a newer speakText call.
+let _activeSpeakGen = -1
+
+// Global user mute (set by CentralOrb click) — prevents TTS output when true
+let _muteGlobal = false
+if (typeof window !== 'undefined') {
+  window.addEventListener('maya:mute', (ev: Event) => {
+    const muted = (ev as CustomEvent<{ muted: boolean }>).detail?.muted ?? false
+    _muteGlobal = muted
+    // If MAYA is currently speaking and user just muted — stop immediately
+    if (muted) stopCurrentAudio()
+  })
+}
 
 // Mute/unmute the speech recognition while MAYA is speaking to prevent feedback loop
 function dispatchMicControl(enabled: boolean) {
@@ -26,8 +78,7 @@ export function stopCurrentAudio() {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     try { window.speechSynthesis.cancel() } catch (_) {}
   }
-  // Re-enable mic in case it was muted during TTS
-  dispatchMicControl(true)
+  // NOTE: do NOT re-enable mic here — speakText's finally block owns that
 }
 
 // Kill audio on page unload/refresh so it never bleeds into next load
@@ -71,9 +122,13 @@ function speakWithSynthesis(text: string, onPlayStart?: () => void): Promise<voi
   })
 }
 
-const TTS_FALLBACK_MS = 1500 // aguarda até 1.5s pela API antes de usar browser voice
+// Sem timeout artificial — EdgeTTS é server-side e sempre disponível.
+// Fallback para browser SpeechSynthesis só ocorre se a API retornar erro HTTP real (não apenas lentidão).
 
 async function speakText(text: string, onPlayStart?: () => void): Promise<void> {
+  // User has muted MAYA — skip TTS entirely but still allow text responses
+  if (_muteGlobal) return
+
   stopCurrentAudio() // also calls dispatchMicControl(true) — will be overridden below
   const myGen = _speakGeneration
   const isStale = () => myGen !== _speakGeneration
@@ -82,6 +137,8 @@ async function speakText(text: string, onPlayStart?: () => void): Promise<void> 
 
   // Mute mic while MAYA is speaking — prevents the speaker audio from re-entering the mic
   dispatchMicControl(false)
+  ;(window as any).__mayaSpeaking = true
+  _activeSpeakGen = myGen // este call agora é o dono do estado de speaking
 
   try {
     // Read user settings at invocation time so changes apply immediately
@@ -104,41 +161,37 @@ async function speakText(text: string, onPlayStart?: () => void): Promise<void> 
 
     const controller = new AbortController()
 
-    // Race: Gemini TTS fetch vs 5s fallback timer
-    const geminiPromise = fetch('/api/maya-tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, provider: settings.ttsProvider, voice: settings.ttsVoice }),
-      signal: controller.signal,
-    }).then(res => {
-      if (!res.ok) throw new Error(`TTS ${res.status}`)
-      return res.blob()
-    })
-
-    const fallbackTimer = new Promise<null>(resolve =>
-      setTimeout(() => resolve(null), TTS_FALLBACK_MS)
-    )
-
+    // Aguarda a API diretamente — sem timeout artificial.
+    // AbortController cancela automaticamente se o usuário enviar nova mensagem (isStale).
+    // Browser SpeechSynthesis só é usado como último recurso em caso de erro HTTP real.
     let blob: Blob | null = null
     try {
-      blob = await Promise.race([geminiPromise, fallbackTimer])
-      if (blob) console.log('[tts] API respondeu, tipo:', blob.type, 'bytes:', blob.size)
+      const res = await fetch('/api/maya-tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, provider: settings.ttsProvider, voice: settings.ttsVoice }),
+        signal: controller.signal,
+      })
+      if (!res.ok) {
+        console.warn('[tts] API falhou:', res.status)
+      } else {
+        blob = await res.blob()
+        if (blob) console.log('[tts] API respondeu, tipo:', blob.type, 'bytes:', blob.size)
+      }
     } catch (e) {
-      console.warn('[tts] fetch falhou:', e)
-      blob = null
+      if ((e as any)?.name !== 'AbortError') console.warn('[tts] fetch falhou:', e)
     }
 
-    if (isStale()) { controller.abort(); return }
+    if (isStale()) return
 
     if (!blob) {
-      // API foi lenta ou falhou — usa browser voice
-      controller.abort()
-      console.warn('[tts] timeout/erro → SpeechSynthesis pt-BR')
+      // API retornou erro HTTP — browser SpeechSynthesis como último recurso
+      console.warn('[tts] API indisponível → SpeechSynthesis fallback')
       await speakWithSynthesis(text, onPlayStart)
       return
     }
 
-    // Gemini responded in time — play WAV audio
+    // API respondeu — reproduz áudio
     const url = URL.createObjectURL(blob)
     const audio = new Audio(url)
     _activeAudio = audio
@@ -156,9 +209,28 @@ async function speakText(text: string, onPlayStart?: () => void): Promise<void> 
       audio.play().then(() => { onPlayStart?.() }).catch(e => { console.warn('[tts] audio.play() falhou:', e); cleanup() })
     })
   } finally {
-    // Always re-enable mic when TTS ends — whether it finished, was interrupted or errored
-    dispatchMicControl(true)
+    // Só limpa __mayaSpeaking se este call ainda é o dono (não foi substituído por uma geração mais nova)
+    if (_activeSpeakGen === myGen) {
+      ;(window as any).__mayaSpeaking = false
+      dispatchMicControl(true)
+    }
   }
+}
+
+// Plays a welcome message to warm up the EdgeTTS WebSocket connection on startup.
+// Should be called once after the boot sequence finishes.
+export async function playWelcomeTTS(): Promise<void> {
+  let welcomeText = 'Oi! Tudo pronto por aqui. Pode falar.'
+  try {
+    const raw = typeof window !== 'undefined' ? window.localStorage.getItem('maya_settings') : null
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed.welcomeMessage && typeof parsed.welcomeMessage === 'string' && parsed.welcomeMessage.trim()) {
+        welcomeText = parsed.welcomeMessage.trim()
+      }
+    }
+  } catch (_) {}
+  await speakText(welcomeText)
 }
 
 export function useMayaChat() {
@@ -220,14 +292,40 @@ export function useMayaChat() {
     return () => window.removeEventListener('maya:clear-messages', handler)
   }, [])
 
-  // Ouvir resultados dos agentes e injetar como mensagens do sistema no chat
+  // Ouvir resultados inline de agentes (curtos/chat) — exibe no chat e fala via TTS Gemini/Azure
   useEffect(() => {
     const handler = (e: Event) => {
       const { agent, task, text } = (e as CustomEvent<{ agent: string; task?: string; text: string }>).detail || {}
       if (!agent || !text) return
-      const preview = text.length > 200 ? text.slice(0, 200) + '…' : text
+      const taskLabel = task ? ` — *${task.slice(0, 80)}*` : ''
+      const msg = `**${agent}**${taskLabel}\n\n${text}`
+      setMessages(prev => [
+        ...prev,
+        { id: `agent-inline-${agent}-${Date.now()}`, role: 'assistant', text: msg },
+      ])
+      // Fala o resultado do agente via Gemini/Azure TTS (mesma pipeline da MAYA)
+      // Aguarda brevemente para não cortar fala anterior em andamento
+      const speakDelay = (window as any).__mayaSpeaking ? 400 : 0
+      setTimeout(() => {
+        speakText(stripMarkdownForTTS(text), () => {
+          try { window.dispatchEvent(new CustomEvent('maya:status', { detail: { status: 'speaking (agent)' } })) } catch (_) {}
+        }).then(() => {
+          try { window.dispatchEvent(new CustomEvent('maya:status', { detail: { status: 'idle' } })) } catch (_) {}
+        }).catch(() => {})
+      }, speakDelay)
+    }
+    window.addEventListener('maya:agent-inline', handler)
+    return () => window.removeEventListener('maya:agent-inline', handler)
+  }, [])
+
+  // Ouvir resultados de agentes salvos em DOCS (arquivos/conteúdo longo)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { agent, task, text } = (e as CustomEvent<{ agent: string; task?: string; text: string }>).detail || {}
+      if (!agent || !text) return
+      const preview = text.length > 150 ? text.slice(0, 150) + '\u2026' : text
       const taskLabel = task ? ` — ${task.slice(0, 60)}` : ''
-      const msg = `✅ **${agent}**${taskLabel}\n\nEntrega disponível na aba **DOCS** para download.\n\n${preview}`
+      const msg = `\u2705 **${agent}**${taskLabel}\n\nArquivo salvo na aba **DOCS** para download.\n\n${preview}`
       setMessages(prev => [
         ...prev,
         { id: `agent-${agent}-${Date.now()}`, role: 'system', text: msg },
@@ -376,7 +474,7 @@ export function useMayaChat() {
               if (matches!.length >= 2) endOffset += matches![1].length
               const firstPart = force ? text : text.slice(0, endOffset)
               setStatus('thinking')
-              ttsPromise = speakText(firstPart, () => setStatus('speaking (stream)'))
+              ttsPromise = speakText(stripMarkdownForTTS(firstPart), () => setStatus('speaking (stream)'))
             }
           if (matches) lastTtsOffset += matches.reduce((a, m) => a + m.length, 0)
         }
@@ -421,7 +519,7 @@ export function useMayaChat() {
         // TTS uses clean text (without protocol blocks)
         if (!ttsStarted && cleanPartial) {
           setStatus('thinking')
-          ttsPromise = speakText(cleanPartial, () => setStatus('speaking (stream)'))
+          ttsPromise = speakText(stripMarkdownForTTS(cleanPartial), () => setStatus('speaking (stream)'))
         }
         if (ttsPromise) await ttsPromise
         setStatus('done')
@@ -450,7 +548,7 @@ export function useMayaChat() {
         try { window.dispatchEvent(new CustomEvent('maya:assistant-message', { detail: { text: assistantText } })) } catch (_) {}
         // Stay in 'thinking' until audio actually starts playing
         setStatus('thinking')
-        await speakText(cleanText, () => setStatus(`speaking (${json.provider ?? 'ai'})`))
+        await speakText(stripMarkdownForTTS(cleanText), () => setStatus(`speaking (${json.provider ?? 'ai'})`))
         setStatus('done')
         sendingRef.current = false
         return
@@ -504,9 +602,9 @@ export function useMayaChat() {
       const currentStatus = statusRef.current
       console.log(`[maya:speech] received: "${normalized}" | status: ${currentStatus}`)
 
-      // If audio is currently playing, ignore speech events to avoid cutting TTS
-      if (_activeAudio) {
-        console.log('[maya:speech] BLOCKED — audio currently playing')
+      // Block if MAYA is currently speaking (covers both HTML audio and browser TTS)
+      if ((window as any).__mayaSpeaking || _activeAudio) {
+        console.log('[maya:speech] BLOCKED — maya is speaking')
         return
       }
 
@@ -539,8 +637,7 @@ export function useMayaChat() {
       abortRef.current?.abort()
       setStatus('thinking')
       addUserMessage(raw.trim())
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      sendMessage({ message: raw.trim() })
+      void sendMessage({ message: raw.trim() })
     }
     window.addEventListener('maya:speech', handler as EventListener)
     return () => window.removeEventListener('maya:speech', handler as EventListener)

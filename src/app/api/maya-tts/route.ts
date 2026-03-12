@@ -1,5 +1,52 @@
-// TTS endpoint — fallback chain: Azure TTS → Gemini 2.5 Flash TTS → OpenAI tts-1 → 503
+// TTS endpoint — fallback chain: EdgeTTS (free) → Azure TTS → Gemini 2.5 Flash TTS → OpenAI tts-1 → 503
 // Client-side (useMayaChat) uses browser SpeechSynthesis when this returns non-200
+
+// ─── EdgeTTS — FREE — Microsoft Edge Read Aloud API ──────────────────────────
+// Mesma voz Neural pt-BR-FranciscaNeural do Azure, sem chave de API.
+// Usa o serviço gratuito do Microsoft Edge (server-side only — não funciona no browser).
+// Instalar: npm install msedge-tts
+async function tryEdgeTTS(text: string): Promise<Response | null> {
+  try {
+    // Sanitize XML special characters (msedge-tts injeta o texto em SSML <prosody>)
+    const escaped = text.replace(/[<>&'"]/g, c =>
+      ({'<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;'}[c] ?? c)
+    )
+
+    // Dynamic import para evitar problemas de bundling no Vercel
+    const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts')
+
+    const tts = new MsEdgeTTS()
+    await tts.setMetadata('pt-BR-FranciscaNeural', OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3)
+
+    const { audioStream } = tts.toStream(escaped)
+
+    const chunks: Buffer[] = []
+    await new Promise<void>((resolve, reject) => {
+      audioStream.on('data', (chunk: Buffer) => chunks.push(chunk))
+      audioStream.on('close', () => resolve())
+      audioStream.on('error', (e: Error) => reject(e))
+    })
+
+    const buf = Buffer.concat(chunks)
+    if (buf.byteLength === 0) {
+      console.warn('[maya-tts] EdgeTTS returned empty audio')
+      return null
+    }
+
+    return new Response(buf, {
+      status: 200,
+      headers: {
+        'Content-Type': 'audio/mpeg',
+        'Content-Length': String(buf.byteLength),
+        'Cache-Control': 'no-store',
+        'X-TTS-Provider': 'edge-francisca',
+      },
+    })
+  } catch (e) {
+    console.warn('[maya-tts] EdgeTTS error:', e)
+    return null
+  }
+}
 
 // Azure TTS — Francisca (pt-BR, Neural) — 500k chars/mês grátis
 // Obter keys em: portal.azure.com → Cognitive Services → Speech
@@ -83,14 +130,13 @@ function buildWavHeader(pcmLen: number, sampleRate = 24000, channels = 1, bitDep
   return h
 }
 
-async function tryGemini(text: string): Promise<Response | null> {
+async function tryGemini(text: string, voiceParam?: string): Promise<Response | null> {
   const key = process.env.GEMINI_API_KEY
   if (!key) return null
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${key}`
 
-  // Use single voice to avoid double RPM consumption
-  for (const voiceName of ['Kore']) {
+  for (const voiceName of [voiceParam || 'Kore']) {
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -134,26 +180,48 @@ async function tryGemini(text: string): Promise<Response | null> {
 
 export async function POST(req: Request) {
   try {
-    const { text } = await req.json().catch(() => ({ text: '' }))
+    const { text, provider, voice } = await req.json().catch(() => ({ text: '', provider: undefined, voice: undefined }))
     if (!text || typeof text !== 'string') {
       return new Response(JSON.stringify({ error: 'text required' }), { status: 400 })
     }
 
-    const voice = process.env.NEXT_PUBLIC_MAYA_VOICE || 'nova'
+    const resolvedVoice = voice || process.env.NEXT_PUBLIC_MAYA_VOICE || 'nova'
 
-    // 1. Azure TTS — Francisca pt-BR Neural (500k chars/mês grátis)
+    // If a specific provider is requested, use only that one (no cascade)
+    if (provider === 'edge') {
+      const r = await tryEdgeTTS(text)
+      if (r) return r
+    }
+    if (provider === 'azure') {
+      const r = await tryAzure(text)
+      if (r) return r
+    }
+    if (provider === 'gemini') {
+      const r = await tryGemini(text, resolvedVoice)
+      if (r) return r
+    }
+    if (provider === 'openai') {
+      const r = await tryOpenAI(text, resolvedVoice)
+      if (r) return r
+    }
+
+    // No provider specified (or requested provider failed) — run default cascade
+    // 1. Edge TTS — FREE — no API key needed
+    const edgeRes = await tryEdgeTTS(text)
+    if (edgeRes) return edgeRes
+
+    // 2. Azure TTS
     const azureRes = await tryAzure(text)
     if (azureRes) return azureRes
 
-    // 2. Try Gemini TTS first (gratuito, mas 10 RPM)
-    const geminiRes = await tryGemini(text)
+    // 3. Gemini TTS
+    const geminiRes = await tryGemini(text, resolvedVoice)
     if (geminiRes) return geminiRes
 
-    // 3. Try OpenAI (with 1 retry on 429)
-    const openaiRes = await tryOpenAI(text, voice)
+    // 4. OpenAI TTS
+    const openaiRes = await tryOpenAI(text, resolvedVoice)
     if (openaiRes) return openaiRes
 
-    // 4. All failed — client will use browser SpeechSynthesis
     console.error('[maya-tts] All providers failed')
     return new Response(JSON.stringify({ error: 'All TTS providers failed' }), { status: 503 })
 

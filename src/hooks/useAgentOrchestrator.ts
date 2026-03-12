@@ -29,29 +29,53 @@ const ALL_AGENTS = [
 const initialStates = (): Record<string, AgentState> =>
   Object.fromEntries(ALL_AGENTS.map(id => [id, { id, status: 'idle' }]))
 
-/** Extrai arquivos de código dos blocos markdown gerados pelo @developer */
-function extractCodeFiles(markdown: string): Array<{ path: string; content: string }> {
+/**
+ * Extrai arquivos do JSON estruturado retornado pelo @developer.
+ * Usa diretamente o campo `files[]` com os `path` originais (estrutura de pastas preservada).
+ * Fallback: tenta extrair blocos markdown caso não seja JSON válido.
+ */
+function extractDeveloperFiles(result: string): { files: Array<{ path: string; content: string }>; projectName: string | null } {
+  // Tenta parsear como JSON estruturado primeiro
+  try {
+    let cleaned = result.replace(/```\w*\n?/g, '').replace(/```/g, '').trim()
+    const firstBrace = cleaned.indexOf('{')
+    const lastBrace = cleaned.lastIndexOf('}')
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      cleaned = cleaned.slice(firstBrace, lastBrace + 1)
+    }
+    const parsed = JSON.parse(cleaned)
+    if (parsed && Array.isArray(parsed.files) && parsed.files.length > 0) {
+      const files = parsed.files
+        .filter((f: any) => f?.path && typeof f.content === 'string' && f.content.length > 0)
+        .map((f: any) => ({ path: f.path as string, content: f.content as string }))
+      return { files, projectName: parsed.project_name || null }
+    }
+  } catch (_) {
+    // JSON parse falhou — cai no fallback de markdown
+  }
+
+  // Fallback: extrai blocos de código markdown
   const files: Array<{ path: string; content: string }> = []
   const regex = /```(html|css|javascript|js|typescript|ts|python|py)[^\n]*\n([\s\S]*?)```/gi
   let match
   const seen = new Set<string>()
-  while ((match = regex.exec(markdown)) !== null) {
+  while ((match = regex.exec(result)) !== null) {
     const lang = match[1].toLowerCase()
     const content = match[2].trim()
     const ext = ['javascript', 'js'].includes(lang) ? 'js'
               : ['typescript', 'ts'].includes(lang) ? 'ts'
               : ['python', 'py'].includes(lang) ? 'py'
               : lang === 'css' ? 'css' : 'html'
-    const filenameMatch = content.match(/^(?:<!--\s*(?:filename:|file:)?\s*([\w.-]+)\s*-->|\/\/\s*(?:filename:|file:)?\s*([\w.-]+)|#\s*(?:filename:|file:)?\s*([\w.-]+))/)
-    const path = filenameMatch
+    const filenameMatch = content.match(/^(?:<!--\s*(?:filename:|file:)?\s*([\w./\-]+)\s*-->|\/\/\s*(?:filename:|file:)?\s*([\w./\-]+)|#\s*(?:filename:|file:)?\s*([\w./\-]+))/)
+    const filePath = filenameMatch
       ? (filenameMatch[1] || filenameMatch[2] || filenameMatch[3])
       : `arquivo-${files.length + 1}.${ext}`
-    if (!seen.has(path) && content.length > 20) {
-      seen.add(path)
-      files.push({ path, content })
+    if (!seen.has(filePath) && content.length > 20) {
+      seen.add(filePath)
+      files.push({ path: filePath, content })
     }
   }
-  return files
+  return { files, projectName: null }
 }
 
 export function useAgentOrchestrator() {
@@ -80,11 +104,6 @@ export function useAgentOrchestrator() {
       const json = await res.json().catch(() => null)
       const text: string = json?.text || `Agente ${agent} concluiu sem resposta.`
       setAgentStatus(agent, { status: 'done', result: text, finishedAt: Date.now() })
-
-      // Injeta resultado no chat via evento global
-      try {
-        window.dispatchEvent(new CustomEvent('maya:agent-result', { detail: { agent, task, text } }))
-      } catch (_) {}
 
       // Persiste em agent_knowledge (fire-and-forget)
       fetch('/api/maya-memory', {
@@ -125,25 +144,87 @@ export function useAgentOrchestrator() {
     // Agrupa todos os resultados como um projeto ZIP na aba DOCS
     const firstTask = delegations[0]?.task || 'projeto'
     const slug = firstTask.slice(0, 40).toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
-    const projectName = `${slug}-${Date.now().toString(36)}`
+    const fallbackProjectName = `${slug}-${Date.now().toString(36)}`
 
     const files: Array<{ path: string; content: string }> = []
-    for (const { agent, result } of results) {
+    let resolvedProjectName = fallbackProjectName
+
+    /**
+     * Decide se o resultado de um agente deve ser exibido inline no chat ou salvo em DOCS.
+     *  - delivery:"file" → sempre para DOCS
+     *  - delivery:"chat" → sempre inline
+     *  - sem delivery → inline se resultado curto (< 2000 chars), DOCS se longo
+     */
+    const shouldInlineResult = (delivery: string | undefined, resultText: string, hasCodeFiles: boolean): boolean => {
+      if (hasCodeFiles) return false
+      if (delivery === 'file') return false
+      if (delivery === 'chat') return true
+      return resultText.length < 2000
+    }
+
+    /**
+     * Chama /api/agent-synthesize para extrair a resposta direta à pergunta do usuário
+     * a partir do resultado bruto do agente. Fallback: retorna resultado bruto.
+     */
+    const synthesizeResult = async (agent: string, question: string, agentResult: string): Promise<string> => {
+      try {
+        const res = await fetch('/api/agent-synthesize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agent, question, agentResult }),
+        })
+        const json = await res.json().catch(() => null)
+        if (json?.text && String(json.text).trim().length > 0) return String(json.text).trim()
+      } catch (_) {}
+      return agentResult
+    }
+
+    for (const r of results) {
+      const { agent, task, result } = r
+      const cmd = delegations.find(d => d.agent === agent)
+      const delivery = (cmd as any)?.delivery as string | undefined
+      // A pergunta original do usuário está no campo context do DELEGATE
+      const originalQuestion = cmd?.context || cmd?.task || task
       const agentSlug = agent.replace('@', '')
-      // Salva o markdown completo do agente
-      files.push({ path: `${agentSlug}.md`, content: result })
-      // Para @developer e @automacao-tecnica: extrai arquivos de código reais
+
       if (agent === '@developer' || agent === '@automacao-tecnica') {
-        const codeFiles = extractCodeFiles(result)
-        files.push(...codeFiles)
+        const { files: codeFiles, projectName: jsonProjectName } = extractDeveloperFiles(result)
+        if (codeFiles.length > 0) {
+          if (jsonProjectName && agent === '@developer') {
+            resolvedProjectName = `${jsonProjectName}-${Date.now().toString(36)}`
+          }
+          files.push(...codeFiles)
+          // Para código: síntese diz o que foi criado
+          const synopsis = await synthesizeResult(agent, originalQuestion, result)
+          try { window.dispatchEvent(new CustomEvent('maya:agent-result', { detail: { agent, task, text: synopsis } })) } catch (_) {}
+        } else if (shouldInlineResult(delivery, result, false)) {
+          const synthesized = await synthesizeResult(agent, originalQuestion, result)
+          try { window.dispatchEvent(new CustomEvent('maya:agent-inline', { detail: { agent, task, text: synthesized } })) } catch (_) {}
+        } else {
+          files.push({ path: `${agentSlug}.md`, content: result })
+          const synopsis = await synthesizeResult(agent, originalQuestion, result)
+          try { window.dispatchEvent(new CustomEvent('maya:agent-result', { detail: { agent, task, text: synopsis } })) } catch (_) {}
+        }
+      } else if (shouldInlineResult(delivery, result, false)) {
+        // Inline: sintetiza primeiro, depois mostra no chat
+        const synthesized = await synthesizeResult(agent, originalQuestion, result)
+        try { window.dispatchEvent(new CustomEvent('maya:agent-inline', { detail: { agent, task, text: synthesized } })) } catch (_) {}
+      } else {
+        // DOCS: salva resultado completo, mostra síntese no chat
+        files.push({ path: `${agentSlug}.md`, content: result })
+        const synopsis = await synthesizeResult(agent, originalQuestion, result)
+        try { window.dispatchEvent(new CustomEvent('maya:agent-result', { detail: { agent, task, text: synopsis } })) } catch (_) {}
       }
     }
 
-    fetch('/api/maya-memory', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tool: 'save_project', payload: { project_name: projectName, files } }),
-    }).catch(() => {})
+    // Salva em DOCS somente se houver arquivos para salvar
+    if (files.length > 0) {
+      fetch('/api/maya-memory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tool: 'save_project', payload: { project_name: resolvedProjectName, files } }),
+      }).catch(() => {})
+    }
 
     return results.map(r => ({ agent: r.agent, result: r.result }))
   }, [runAgent])

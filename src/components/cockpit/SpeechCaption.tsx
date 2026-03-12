@@ -55,20 +55,7 @@ export default function SpeechCaption() {
   const display = text.length > MAX_CHARS ? text.slice(text.length - MAX_CHARS) : text
 
   return (
-    <div style={{
-      position: 'fixed',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      zIndex: 50,
-      display: 'flex',
-      justifyContent: 'center',
-      paddingBottom: '20px',
-      paddingLeft: '24px',
-      paddingRight: '24px',
-      pointerEvents: 'none',
-      animation: 'fadeInCaption 0.2s ease',
-    }}>
+    <div className="speech-caption">
       <div style={{
         maxWidth: '600px',
         width: '100%',
@@ -90,8 +77,8 @@ export default function SpeechCaption() {
             boxShadow: isFinal ? '0 0 6px #00ff88' : '0 0 6px #00d4ff',
             animation: isFinal ? 'none' : 'pulse 0.8s ease-in-out infinite',
           }} />
-          <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', color: 'rgba(0,212,255,0.5)', textTransform: 'uppercase' }}>
-            {isFinal ? 'recebido' : 'escutando'}
+          <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', color: isFinal ? 'rgba(0,255,136,0.7)' : 'rgba(0,212,255,0.7)', textTransform: 'uppercase', fontFamily: 'Orbitron, monospace' }}>
+            {isFinal ? 'RECEBIDO' : 'ESCUTANDO'}
           </span>
         </div>
 

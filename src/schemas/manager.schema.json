@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["objective", "okrs", "roadmap", "next_steps"],
+  "properties": {
+    "objective": { "type": "string" },
+    "okrs": {
+      "type": "array",
+      "items": { "type": "object", "required": ["key_result", "target", "owner"] }
+    },
+    "roadmap": {
+      "type": "array",
+      "items": { "type": "object", "required": ["milestone", "due", "effort"] }
+    },
+    "next_steps": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

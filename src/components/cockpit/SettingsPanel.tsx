@@ -6,13 +6,16 @@ type Settings = {
   ttsProvider: string
   debug: boolean
   keepAudioInBackground?: boolean
+  welcomeMessage?: string
+  _providerExplicit?: boolean
 }
 
 const DEFAULTS: Settings = {
   ttsVoice: 'pt-BR-FranciscaNeural',
-  ttsProvider: 'azure',
+  ttsProvider: 'edge',
   debug: false,
   keepAudioInBackground: false,
+  welcomeMessage: '',
 }
 
 async function clearAllMemory(): Promise<boolean> {
@@ -45,7 +48,16 @@ export default function SettingsPanel() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem('maya_settings')
-      if (raw) setSettings(JSON.parse(raw))
+      if (raw) {
+        const saved = JSON.parse(raw)
+        // Migra: 'azure' era o antigo default — substitui por 'edge' se não foi escolha explícita do usuário
+        if (saved.ttsProvider === 'azure' && !saved._providerExplicit) {
+          saved.ttsProvider = 'edge'
+          saved.ttsVoice = 'pt-BR-FranciscaNeural'
+        }
+        // Mescla com DEFAULTS para que novas chaves sempre tenham valor inicial
+        setSettings({ ...DEFAULTS, ...saved })
+      }
     } catch (e) {
       // ignore
     }
@@ -59,7 +71,9 @@ export default function SettingsPanel() {
 
   function handleSave() {
     try {
-      localStorage.setItem('maya_settings', JSON.stringify(settings))
+      // Marca que o usuário escolheu explicitamente o provedor (impede migração automática futura)
+      const toSave = { ...settings, _providerExplicit: true }
+      localStorage.setItem('maya_settings', JSON.stringify(toSave))
       setSaved(true)
       // Notify runtime that settings changed so listeners can apply immediately
       try {
@@ -109,10 +123,8 @@ export default function SettingsPanel() {
       tabIndex={-1}
       style={{
         position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100vw',
-        height: '100vh',
+        top: 0, left: 0,
+        width: '100vw', height: '100vh',
         zIndex: 99999,
         background: 'rgba(2,6,9,0.85)',
         display: 'flex',
@@ -123,184 +135,218 @@ export default function SettingsPanel() {
     >
       <div
         style={{
-          width: '320px',
-          background: 'rgba(2,6,9,0.92)',
+          width: 'min(92vw, 960px)',
+          background: 'rgba(2,6,9,0.95)',
           border: '1px solid rgba(0,212,255,0.18)',
-          borderRadius: '10px',
-          padding: '22px 18px',
-          boxShadow: '0 0 32px rgba(0,212,255,0.13)',
+          borderRadius: '12px',
+          padding: '28px 32px 24px',
+          boxShadow: '0 0 48px rgba(0,212,255,0.12)',
           fontFamily: 'Share Tech Mono, monospace',
           color: '#00d4ff',
           animation: 'chatExpand 0.2s ease',
           display: 'flex',
           flexDirection: 'column',
-          gap: '18px',
+          gap: '24px',
           position: 'relative',
         }}
       >
         {/* Header */}
-        <div style={{ fontSize: '14px', fontWeight: 700, letterSpacing: '0.12em', color: 'rgba(0,212,255,0.7)', textTransform: 'uppercase', marginBottom: '8px' }}>
-          Configurações
-        </div>
-
-        {/* Voz TTS */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '12px', color: '#00d4ff', fontWeight: 600 }}>Voz TTS</label>
-          <select
-            style={{
-              background: 'rgba(0,0,0,0.4)',
-              border: '1px solid rgba(0,212,255,0.2)',
-              borderRadius: '6px',
-              padding: '12px',
-              fontSize: '15px',
-              color: '#fff',
-              outline: 'none',
-              fontFamily: 'Share Tech Mono, monospace',
-              cursor: 'pointer',
-              minHeight: '44px',
-              width: '100%',
-              zIndex: 2,
-              pointerEvents: 'auto',
-            }}
-            value={settings.ttsVoice}
-            onChange={(e) => update('ttsVoice', e.target.value)}
-          >
-            <option value="pt-BR-FranciscaNeural">pt-BR Francisca (Azure)</option>
-            <option value="nova">Nova (client)</option>
-            <option value="onyx">Onyx (OpenAI)</option>
-          </select>
-        </div>
-
-        {/* Provedor TTS */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '12px', color: '#00d4ff', fontWeight: 600 }}>Provedor TTS</label>
-          <select
-            style={{
-              background: 'rgba(0,0,0,0.4)',
-              border: '1px solid rgba(0,212,255,0.2)',
-              borderRadius: '6px',
-              padding: '12px',
-              fontSize: '15px',
-              color: '#fff',
-              outline: 'none',
-              fontFamily: 'Share Tech Mono, monospace',
-              cursor: 'pointer',
-              minHeight: '44px',
-              width: '100%',
-              zIndex: 2,
-              pointerEvents: 'auto',
-            }}
-            value={settings.ttsProvider}
-            onChange={(e) => update('ttsProvider', e.target.value)}
-          >
-            <option value="azure">Azure Speech</option>
-            <option value="gemini">Gemini TTS</option>
-            <option value="openai">OpenAI TTS</option>
-            <option value="browser">Browser SpeechSynthesis</option>
-          </select>
-        </div>
-
-        {/* Debug logs */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <input
-            type="checkbox"
-            checked={settings.debug}
-            onChange={(e) => update('debug', e.target.checked)}
-            style={{ accentColor: '#00ff88', marginRight: '6px', transform: 'scale(1.2)' }}
-          />
-          <span style={{ fontSize: '12px', color: '#00d4ff' }}>Ativar logs de debug</span>
-        </div>
-
-        {/* Keep audio playing when tab hidden */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <input
-            type="checkbox"
-            checked={!!settings.keepAudioInBackground}
-            onChange={(e) => update('keepAudioInBackground', e.target.checked)}
-            style={{ accentColor: '#00ff88', marginRight: '6px', transform: 'scale(1.2)' }}
-          />
-          <span style={{ fontSize: '12px', color: '#00d4ff' }}>Continuar áudio em segundo plano</span>
-        </div>
-
-        {/* Limpar memória */}
-        <div style={{ borderTop: '1px solid rgba(0,212,255,0.1)', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <span style={{ fontSize: '12px', color: 'rgba(0,212,255,0.5)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Memória</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '0.15em', color: 'rgba(0,212,255,0.7)', textTransform: 'uppercase' }}>
+            ⚙ Configurações
+          </span>
           <button
-            onClick={handleClearMemory}
-            disabled={clearing}
+            onClick={() => window.dispatchEvent(new CustomEvent('closeSettingsModal'))}
             style={{
-              padding: '10px 0',
-              borderRadius: '6px',
-              background: 'rgba(239,68,68,0.08)',
-              border: '1px solid rgba(239,68,68,0.3)',
-              color: cleared ? '#4ade80' : '#f87171',
-              fontSize: '13px',
-              cursor: clearing ? 'not-allowed' : 'pointer',
+              fontSize: '12px', color: '#fff',
+              background: 'rgba(0,212,255,0.10)', border: '1px solid rgba(0,212,255,0.18)',
+              borderRadius: '6px', padding: '4px 14px', cursor: 'pointer',
               fontFamily: 'Share Tech Mono, monospace',
-              opacity: clearing ? 0.5 : 1,
-              transition: 'all 0.2s',
-              width: '100%',
             }}
           >
-            {cleared ? '✓ Memória limpa' : clearing ? 'Limpando...' : '🗑 Limpar histórico e memória'}
+            Fechar
           </button>
         </div>
 
-        {/* Save button */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', zIndex: 1 }}>
+        {/* 3-column grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
+
+          {/* ── Coluna 1: Voz ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <span style={{ fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(0,212,255,0.45)', borderBottom: '1px solid rgba(0,212,255,0.1)', paddingBottom: '6px' }}>
+              Voz
+            </span>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11px', color: '#00d4ff', fontWeight: 600 }}>Provedor TTS</label>
+              <select
+                value={settings.ttsProvider}
+                onChange={(e) => {
+                  const provider = e.target.value
+                  const voiceDefaults: Record<string, string> = {
+                    edge: 'pt-BR-FranciscaNeural',
+                    azure: 'pt-BR-FranciscaNeural',
+                    gemini: 'Kore',
+                    openai: 'nova',
+                    browser: '',
+                  }
+                  // Atualiza ttsProvider + ttsVoice em um único setState para evitar race condition
+                  setSettings(prev => ({ ...prev, ttsProvider: provider, ttsVoice: voiceDefaults[provider] ?? '' }))
+                  setSaved(false)
+                }}
+                style={selectStyle}
+              >
+                <option value="edge">EdgeTTS (grátis, padrão)</option>
+                <option value="azure">Azure Speech</option>
+                <option value="gemini">Gemini TTS</option>
+                <option value="openai">OpenAI TTS</option>
+                <option value="browser">Browser SpeechSynthesis</option>
+              </select>
+            </div>
+
+            {settings.ttsProvider !== 'browser' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11px', color: '#00d4ff', fontWeight: 600 }}>Voz TTS</label>
+              {(settings.ttsProvider === 'edge' || settings.ttsProvider === 'azure' || !settings.ttsProvider) && (
+                <select value={settings.ttsVoice} onChange={(e) => update('ttsVoice', e.target.value)} style={selectStyle}>
+                  <option value="pt-BR-FranciscaNeural">pt-BR Francisca Neural</option>
+                </select>
+              )}
+              {settings.ttsProvider === 'gemini' && (
+                <select value={settings.ttsVoice} onChange={(e) => update('ttsVoice', e.target.value)} style={selectStyle}>
+                  <option value="Kore">Kore (feminino)</option>
+                  <option value="Aoede">Aoede (feminino)</option>
+                  <option value="Fenrir">Fenrir (masculino)</option>
+                  <option value="Charon">Charon (masculino)</option>
+                  <option value="Puck">Puck (masculino)</option>
+                  <option value="Zephyr">Zephyr (feminino)</option>
+                  <option value="Orbit">Orbit (neutro)</option>
+                </select>
+              )}
+              {settings.ttsProvider === 'openai' && (
+                <select value={settings.ttsVoice} onChange={(e) => update('ttsVoice', e.target.value)} style={selectStyle}>
+                  <option value="nova">Nova (feminino)</option>
+                  <option value="alloy">Alloy (neutro)</option>
+                  <option value="echo">Echo (masculino)</option>
+                  <option value="fable">Fable (masculino)</option>
+                  <option value="onyx">Onyx (masculino)</option>
+                  <option value="shimmer">Shimmer (feminino)</option>
+                </select>
+              )}
+              {settings.ttsProvider === 'gemini' && (
+                <span style={{ fontSize: '10px', color: 'rgba(0,212,255,0.38)' }}>Requer GEMINI_API_KEY — 10 RPM no plano gratuito</span>
+              )}
+              {settings.ttsProvider === 'openai' && (
+                <span style={{ fontSize: '10px', color: 'rgba(0,212,255,0.38)' }}>Requer OPENAI_API_KEY — cobrado por caractere</span>
+              )}
+              {settings.ttsProvider === 'azure' && (
+                <span style={{ fontSize: '10px', color: 'rgba(0,212,255,0.38)' }}>Requer AZURE_TTS_KEY — 500k chars/mês grátis</span>
+              )}
+              {(settings.ttsProvider === 'edge' || !settings.ttsProvider) && (
+                <span style={{ fontSize: '10px', color: 'rgba(0,255,136,0.6)' }}>✓ Gratuito, sem API key necessária</span>
+              )}
+            </div>
+            )}
+          </div>
+
+          {/* ── Coluna 2: Interface ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <span style={{ fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(0,212,255,0.45)', borderBottom: '1px solid rgba(0,212,255,0.1)', paddingBottom: '6px' }}>
+              Interface
+            </span>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11px', color: '#00d4ff', fontWeight: 600 }}>Mensagem de inicialização</label>
+              <input
+                type="text"
+                placeholder="Oi! Tudo pronto por aqui."
+                value={settings.welcomeMessage ?? ''}
+                onChange={(e) => update('welcomeMessage', e.target.value)}
+                style={inputStyle}
+              />
+              <span style={{ fontSize: '10px', color: 'rgba(0,212,255,0.38)' }}>Deixe em branco para usar a padrão</span>
+            </div>
+
+            <label style={checkboxRowStyle}>
+              <input type="checkbox" checked={settings.debug} onChange={(e) => update('debug', e.target.checked)} style={checkStyle} />
+              <span style={{ fontSize: '12px' }}>Ativar logs de debug</span>
+            </label>
+
+            <label style={checkboxRowStyle}>
+              <input type="checkbox" checked={!!settings.keepAudioInBackground} onChange={(e) => update('keepAudioInBackground', e.target.checked)} style={checkStyle} />
+              <span style={{ fontSize: '12px' }}>Continuar áudio em segundo plano</span>
+            </label>
+          </div>
+
+          {/* ── Coluna 3: Dados ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <span style={{ fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(0,212,255,0.45)', borderBottom: '1px solid rgba(0,212,255,0.1)', paddingBottom: '6px' }}>
+              Dados & Memória
+            </span>
+
+            <button
+              onClick={handleClearMemory}
+              disabled={clearing}
+              style={{
+                padding: '10px 0', borderRadius: '6px',
+                background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)',
+                color: cleared ? '#4ade80' : '#f87171',
+                fontSize: '12px', cursor: clearing ? 'not-allowed' : 'pointer',
+                fontFamily: 'Share Tech Mono, monospace', opacity: clearing ? 0.5 : 1,
+                transition: 'all 0.2s',
+              }}
+            >
+              {cleared ? '✓ Memória limpa' : clearing ? 'Limpando...' : '🗑 Limpar histórico e memória'}
+            </button>
+
+            <div style={{ fontSize: '10px', color: 'rgba(0,212,255,0.38)', lineHeight: 1.6, marginTop: 'auto' }}>
+              <strong style={{ color: 'rgba(0,212,255,0.55)' }}>Nota:</strong> Chaves de API devem ser configuradas em{' '}
+              <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 4px', borderRadius: 3, color: '#fff' }}>.env.local</code>.
+              Este painel define apenas preferências locais.
+            </div>
+          </div>
+        </div>
+
+        {/* Footer: Save */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderTop: '1px solid rgba(0,212,255,0.1)', paddingTop: '18px' }}>
           <button
-            style={{
-              padding: '14px 0',
-              borderRadius: '6px',
-              background: 'rgba(0,212,255,0.1)',
-              border: '1px solid rgba(0,212,255,0.3)',
-              color: '#00d4ff',
-              fontSize: '16px',
-              cursor: 'pointer',
-              fontWeight: 700,
-              fontFamily: 'Share Tech Mono, monospace',
-              boxShadow: '0 0 8px rgba(0,212,255,0.15)',
-              transition: 'all 0.2s',
-              width: '100%',
-              minHeight: '44px',
-              zIndex: 3,
-              pointerEvents: 'auto',
-            }}
             onClick={handleSave}
+            style={{
+              padding: '11px 40px', borderRadius: '6px',
+              background: 'rgba(0,212,255,0.10)', border: '1px solid rgba(0,212,255,0.3)',
+              color: '#00d4ff', fontSize: '13px', cursor: 'pointer',
+              fontWeight: 700, fontFamily: 'Share Tech Mono, monospace',
+              boxShadow: '0 0 8px rgba(0,212,255,0.12)', transition: 'all 0.2s',
+            }}
           >
             Salvar
           </button>
-          {saved && (
-            <span style={{ fontSize: '12px', color: '#00ff88', fontWeight: 700, animation: 'pulse 1s infinite' }}>Salvo!</span>
-          )}
+          {saved && <span style={{ fontSize: '12px', color: '#00ff88', fontWeight: 700 }}>✓ Salvo!</span>}
         </div>
-
-        {/* Nota */}
-        <div style={{ fontSize: '11px', color: 'rgba(0,212,255,0.45)', marginTop: '8px', lineHeight: 1.5 }}>
-          <strong>Nota:</strong> As chaves dos provedores devem ser configuradas em <span style={{ background: 'rgba(0,0,0,0.25)', padding: '2px 4px', borderRadius: '4px', color: '#fff' }}>.env.local</span> para provedores server-side.<br />
-          Este painel define apenas preferências locais da interface.
-        </div>
-        {/* Botão fechar */}
-        <button
-          onClick={() => window.dispatchEvent(new CustomEvent('closeSettingsModal'))}
-          style={{
-            position: 'absolute',
-            bottom: '10px',
-            right: '14px',
-            fontSize: '12px',
-            color: '#fff',
-            background: 'rgba(0,212,255,0.13)',
-            border: '1px solid rgba(0,212,255,0.18)',
-            borderRadius: '6px',
-            padding: '4px 10px',
-            cursor: 'pointer',
-            fontFamily: 'Share Tech Mono, monospace',
-            boxShadow: '0 0 6px rgba(0,212,255,0.13)',
-          }}
-        >
-          Fechar
-        </button>
       </div>
     </div>
   )
+}
+
+/* ── Shared micro-styles ── */
+const selectStyle: React.CSSProperties = {
+  background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,212,255,0.2)',
+  borderRadius: '6px', padding: '9px 10px', fontSize: '13px',
+  color: '#fff', outline: 'none', fontFamily: 'Share Tech Mono, monospace',
+  cursor: 'pointer', width: '100%',
+}
+
+const inputStyle: React.CSSProperties = {
+  background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(0,212,255,0.2)',
+  borderRadius: '6px', padding: '9px 10px', fontSize: '13px',
+  color: '#fff', outline: 'none', fontFamily: 'Share Tech Mono, monospace', width: '100%',
+  boxSizing: 'border-box',
+}
+
+const checkboxRowStyle: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#00d4ff',
+}
+
+const checkStyle: React.CSSProperties = {
+  accentColor: '#00ff88', transform: 'scale(1.2)', cursor: 'pointer',
 }
