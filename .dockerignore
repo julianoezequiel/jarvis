@@ -1,0 +1,38 @@
+# Build artifacts
+.next/
+out/
+
+# Dev dependencies & local tools
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# Environment secrets — NEVER bake into image
+.env
+.env.local
+.env.*.local
+
+# Vosk ASR auto-download cache (runtime artifact)
+.vosk/
+
+# Git & CI metadata
+.git/
+.github/
+.gitignore
+
+# IDE / OS clutter
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# Test artifacts
+coverage/
+data/local_memory.json
+
+# Docs (not needed at runtime)
+docs/
+
+# TypeScript cache
+tsconfig.tsbuildinfo

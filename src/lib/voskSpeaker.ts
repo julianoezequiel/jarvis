@@ -14,8 +14,21 @@ import { randomUUID } from 'crypto'
 
 const execFileAsync = promisify(execFile)
 
-/** Resolve paths relative to the Next.js project root (process.cwd()). */
-const PYTHON = path.join(process.cwd(), '.venv', 'Scripts', 'python.exe')
+/**
+ * Resolve paths relative to the Next.js project root (process.cwd()).
+ *
+ * PYTHON env var allows overriding the Python executable — essential for Docker
+ * deployments (Linux) where the path differs from the Windows .venv layout.
+ *   Docker example:  PYTHON=/app/.venv/bin/python3
+ *   Windows default: <cwd>/.venv/Scripts/python.exe
+ */
+const PYTHON =
+  process.env.PYTHON ??
+  path.join(
+    process.cwd(),
+    '.venv',
+    process.platform === 'win32' ? path.join('Scripts', 'python.exe') : path.join('bin', 'python3'),
+  )
 const SCRIPT = path.join(process.cwd(), 'src', 'scripts', 'vosk_speaker.py')
 
 export interface VoiceProfile {

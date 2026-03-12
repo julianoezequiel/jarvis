@@ -3,7 +3,7 @@
 **Task:** JARVIS-TASK-002  
 **Branch:** `feature/jarvis-TASK-002`  
 **Início:** 12/03/2026  
-**Última atualização:** 13/03/2026 (sessão 6)  
+**Última atualização:** 20/03/2026 (sessão 9)  
 
 ---
 
@@ -17,7 +17,7 @@
 | 4 | Enrollment Externo via evento | ✅ Concluído |
 | 5 | Embed Script (script tag + iframe) | ✅ Concluído |
 | 6 | Integração PontoCore Frontend | ✅ Concluído |
-| 7 | Dockerfile e Containerização | ⏳ Não iniciado |
+| 7 | Dockerfile e Containerização | 🔄 Em progresso |
 
 ---
 
@@ -282,6 +282,137 @@ window.__maya.off(event, fn)              // cancela listener
 
 ---
 
+---
+
+### 17/03/2026 — Sessão 7: Log collector + melhorias de enrollment
+
+#### Browser Log Collector (`d7cd2cf`)
+
+- ✅ `src/components/cockpit/MayaCockpit.tsx` — atalho `Ctrl+Shift+L` adicionado
+  - Intercepta `keydown` globalmente e chama `downloadLogs()`
+  - `downloadLogs`: serializa `console.log/warn/error` interceptados → JSON → blob → `<a download>` automático
+  - Útil para debug de produção sem acesso ao DevTools do usuário
+  - Zero dependências externas — interceptor nativo do browser
+
+#### Enrollment 35s com Extração Múltipla (`5b2c32a`)
+
+- ✅ `src/components/cockpit/VoiceEnrollModal.tsx` — duração de gravação ajustada para **35 segundos**
+  - Motivo: permite capturar múltiplas frases distintas em uma única sessão
+  - Auto-extração de até **6 segmentos** (embeddings independentes) em vez de 1 único
+  - Algoritmo de segmentação automática por energia RMS (detecta silêncios)
+  - Cada embedding é enviado individualmente → `POST /api/speaker-enroll` com `multiSample: true`
+  - `src/app/api/speaker-enroll/route.ts` — suporte a `multiSample: true`
+    - Armazena até 6 embeddings separados com `skill_name: '{name}:sample:{i}'`
+    - Comparação futura usa média dos top-3 scores mais altos (mais robusto)
+
+- ✅ Texto de amostra padronizado como "Sistema MAYA" (`b7608bc`)
+  - Frase exibida ao usuário durante a gravação corrigida
+
+- ✅ `useWakeWord.ts` — SpeechRecognition pausado durante gravação de enrollment (`3a61672`)
+  - Previne interfência: a transcrição contínua não captava o microfone em paralelo
+  - Ouve evento `maya:enroll-start` → para recognition; `maya:enroll-end` → restart
+
+---
+
+### 17/03/2026 — Sessão 8: Session-trust + sem-microfone
+
+#### Session-Trust para Verificação de Voz (`ee8ee47`)
+
+- ✅ `src/hooks/useSpeakerVerify.ts` — modelo de confiança de sessão
+  - `INITIAL_THRESHOLD = 0.70` — primer verificação na sessão exige score alto
+  - `SESSION_THRESHOLD = 0.45` — verificações subsequentes (mesma sessão) aceitam score menor
+  - `SESSION_EXPIRE_MS = 8 * 60 * 1000` — sessão expira após 8 minutos de inatividade
+  - `_touchSession()` — atualiza timestamp a cada verificação bem-sucedida
+  - `_clearSession()` — limpa estado de sessão (manual ou expiração)
+  - Evento `maya:lock-session` — permite bloqueio manual via SettingsPanel
+  - Resultado: reduz falsos negativos em conversas longas sem comprometer segurança
+
+#### Modos de Voz Independentes (`c54e7bc` + `c30dea0`)
+
+Dois flags independentes controlam comportamento de voz:
+
+| Flag (`localStorage`) | Efeito |
+|---|---|
+| `maya_text_only_mode = 'true'` | Desabilita apenas TTS — Maya lê e ouve, mas não fala |
+| `maya_no_mic_mode = 'true'` | Desabilita microfone completamente — entrada exclusiva por texto |
+
+**Arquivos modificados:**
+
+- ✅ `src/components/cockpit/MayaCockpit.tsx`
+  - `noMic` state: `useState(() => localStorage.getItem('maya_no_mic_mode') === 'true')` (lazy init — evita race condition no boot)
+  - `useEffect([noMic])` — pula `getUserMedia` e `maya:init-mic` quando `noMic=true`
+  - `<BootSequence noMic={noMic} />` — prop renomeada de `textOnly` para `noMic`
+  - `<CentralOrb />` oculto quando `noMic=true`
+  - `<SpeechCaption />` oculto quando `noMic=true`
+  - Ouve evento `maya:no-mic-changed` para atualização em tempo real
+
+- ✅ `src/components/cockpit/BootSequence.tsx`
+  - Prop: `noMic?: boolean` — pula `maya:init-mic` dispatch no final do boot quando ativado
+
+- ✅ `src/components/cockpit/ChatPanel.tsx`
+  - Dois lazy states independentes: `noTts` e `noMic`
+  - Badge de status sempre visível; estados 'falando' e 'mic off' condicionais
+  - Botão ⏸ parar oculto quando TTS desabilitado
+  - Ouve `maya:text-only-changed` e `maya:no-mic-changed` para sync em tempo real
+
+- ✅ `src/components/cockpit/SettingsPanel.tsx`
+  - **Dois toggles separados** na seção de voz:
+    - "Não falar — desabilitar TTS" → `maya_text_only_mode` → dispatches `maya:text-only-changed`
+    - "Não escutar — desabilitar microfone" → `maya_no_mic_mode` → dispatches `maya:no-mic-changed`
+  - Sub-configurações de voz (verificação, wake word, threshold, perfis) ficam "escurecidas" quando `noMicMode=true`
+  - Botão Enroll desabilitado quando `noMicMode=true`
+
+- ✅ `src/hooks/useMayaChat.ts`
+  - `speakText()` — early return imediato se `maya_text_only_mode === 'true'`
+  - `playWelcomeTTS()` — early return imediato se `maya_text_only_mode === 'true'`
+
+---
+
+---
+
+### 20/03/2026 — Sessão 9: Fase 7 — Dockerfile e Containerização
+
+#### Modificações ao código existente
+
+- ✅ `src/lib/voskSpeaker.ts` — `PYTHON` constante agora é configurável via env var
+  - `process.env.PYTHON` tem prioridade absoluta
+  - Fallback automático por plataforma: Windows → `.venv/Scripts/python.exe`; Linux → `.venv/bin/python3`
+  - Permite override em Docker sem alterar código: `ENV PYTHON=/app/.venv/bin/python3`
+
+#### Novos arquivos
+
+- ✅ `database/migrations/002_add_agent_knowledge.sql` — tabela `agent_knowledge` que estava ausente
+  - Usada pela API `/api/knowledge` (Knowledge Base) e pelos agentes
+  - Índices: `(agent_id, skill_name)` + GIN full-text search em `content`
+
+- ✅ `.dockerignore` — ignora `node_modules/`, `.next/`, `.venv/`, `.env.*`, `docs/`, testes
+
+- ✅ `Dockerfile` — multi-stage build (deps + builder + runner)
+  - **deps**: `node:20-slim` + `npm ci --omit=dev` → prod node_modules
+  - **builder**: `node:20-slim` + `npm ci` + `npm run build` → `.next/` output
+  - **runner**: `node:20-slim` + Python3 + venv + vosk + postgresql-client + netcat
+    - `python3 -m venv /app/.venv && pip install vosk` — usa wheel manylinux (sem compilação)
+    - Inclui `models/vosk-model-spk-0.4` (13 MB) — speaker model baked na imagem
+    - Entrypoint: `docker/entrypoint.sh`
+  - Estimativa de tamanho final: ~ 400–550 MB (dentro do limite de 700 MB)
+
+- ✅ `docker/entrypoint.sh` — shell script de inicialização
+  - Se `DB_ADAPTER=postgres`: usa Python para parsear host:port do DATABASE_URL
+  - Aguarda TCP disponível com `nc` (netcat), retries a cada 2s por até 60s
+  - Executa todos os `.sql` de `database/migrations/` via `psql` (idempotente — `IF NOT EXISTS`)
+  - Inicia Next.js: `exec node_modules/.bin/next start -p ${PORT:-3000}`
+
+- ✅ `docker-compose.widget.yml` — stack standalone: Maya Widget + PostgreSQL
+  - Serviço `maya-postgres`: `postgres:16-alpine`, healthcheck `pg_isready`
+  - Serviço `maya-widget`: build local, `depends_on: service_healthy`
+  - Volume `maya_vosk_cache:/root/.vosk` — persiste ASR model auto-downloaded
+  - Porta `3000:3000` para o widget; `5433:5432` para o postgres (evita conflito local)
+  - Lê API keys do `.env` do host via `${ANTHROPIC_API_KEY}` etc.
+
+- ✅ `docs/07-KNOWLEDGE-BASE/FEATURE-REFERENCE.md` — documentação de referência completa
+  - 13 seções cobrindo: arquitetura, cockpit, chat, voz, speaker ID, modos de voz,
+    memória, base de conhecimento, 21 agentes, widget, API de embed, Docker, debug
+
 ## Próximo Passo
 
-**Fase 7 — Dockerfile e Containerização**
+**Merge para `main` após validação final** (`npx tsc --noEmit` + `npx vitest run`)

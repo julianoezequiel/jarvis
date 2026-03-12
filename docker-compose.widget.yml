@@ -1,0 +1,90 @@
+# docker-compose.widget.yml — Maya Widget standalone stack
+#
+# Starts Maya Widget + a dedicated PostgreSQL instance.
+# All API keys must be provided as environment variables or via a .env file.
+#
+# Usage:
+#   cp .env.local.example .env.local   # fill in your API keys
+#   docker compose -f docker-compose.widget.yml up --build
+#
+# The widget will be available at http://localhost:3000
+# You can embed it anywhere with:
+#   <script src="http://localhost:3000/maya-widget.js" data-position="right"></script>
+
+version: "3.9"
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  maya-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: maya
+      POSTGRES_PASSWORD: maya_dev_pass
+      POSTGRES_DB: maya_db
+    volumes:
+      - maya_postgres_data:/var/lib/postgresql/data
+    # Expose on 5433 to avoid conflict with a local PostgreSQL on 5432
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maya -d maya_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  # ── Maya Widget (Next.js) ───────────────────────────────────────────────────
+  maya-widget:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      maya-postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # Database — use the pg adapter with the local postgres service
+      DB_ADAPTER: postgres
+      DATABASE_URL: postgresql://maya:maya_dev_pass@maya-postgres:5432/maya_db
+      # Python — set by Dockerfile, repeated here for clarity
+      PYTHON: /app/.venv/bin/python3
+
+      # ── API Keys (required) ─────────────────────────────────────────────────
+      # Set these in a .env file or pass them explicitly
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+
+      # ── API Keys (optional) ──────────────────────────────────────────────────
+      GEMINI_API_KEY_FREE: ${GEMINI_API_KEY_FREE:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+
+      # ── Maya configuration ──────────────────────────────────────────────────
+      NEXT_PUBLIC_WAKE_WORD: ${NEXT_PUBLIC_WAKE_WORD:-maya}
+      NEXT_PUBLIC_JARVIS_VOICE: ${NEXT_PUBLIC_JARVIS_VOICE:-alloy}
+      NEXT_PUBLIC_REALTIME_MODEL: ${NEXT_PUBLIC_REALTIME_MODEL:-gpt-4o-realtime-preview}
+
+    volumes:
+      # Persist the Vosk ASR auto-download cache (~30 MB, downloaded once)
+      # This is separate from the spk model which is baked into the image.
+      - maya_vosk_cache:/root/.vosk
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+# ── Named volumes ───────────────────────────────────────────────────────────
+volumes:
+  maya_postgres_data:
+    driver: local
+  maya_vosk_cache:
+    driver: local
