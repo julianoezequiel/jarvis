@@ -86,6 +86,21 @@ let _commitTimer: ReturnType<typeof setTimeout> | null = null // bridges text ac
 let _micStream: MediaStream | null = null // physical mic stream — muted at hardware level during TTS
 let _muteResumeTimer: ReturnType<typeof setTimeout> | null = null // pending echo-guard resume
 let _userMuted = false // mute state set by user (CentralOrb click) — persists until toggled
+let _speechStartTime = 0 // timestamp of last onspeechstart — used to calibrate audio window for verification
+
+/** Returns a base64 WAV clip sized to the actual speech duration (min 2s, max 8s).
+ *  Uses _speechStartTime tracked in onspeechstart for a tight, noise-free window.
+ *  Falls back to fixed 5s if start is unknown. */
+function _getSpeechAudioB64(): string | null {
+  const MIN_SEC = 2
+  const MAX_SEC = 8
+  const TAIL_SEC = 0.5 // extra buffer after speech ends
+  const durationSec = _speechStartTime > 0
+    ? Math.max(MIN_SEC, Math.min(MAX_SEC, (Date.now() - _speechStartTime) / 1000 + TAIL_SEC))
+    : 5
+  console.log(`[maya:mic] audio window for verification: ${durationSec.toFixed(1)}s`)
+  return _getLastAudioB64(durationSec)
+}
 
 // ─── Wake word gate ─────────────────────────────────────────────────────────
 // Default ON. OFF = ouve tudo (modo widget embutido).
@@ -137,7 +152,8 @@ const STANDBY_REGEX = /\b(?:pare?|para|encerra?)\s+de\s+(?:escutar|ouvir)\b|\bmo
 function dispatchSpeech(text: string) {
   if (!isWakeWordEnabled()) {
     // Modo sempre ativo (widget embutido, wake word desligado)
-    window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text, audioB64: _getLastAudioB64(5) } }))
+    window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text, audioB64: _getSpeechAudioB64() } }))
+    _speechStartTime = 0
     return
   }
   if (_wakeActive) {
@@ -146,10 +162,12 @@ function dispatchSpeech(text: string) {
       console.log('[maya:mic] standby command detected — deactivating wake word')
       deactivateWakeWord()
       window.dispatchEvent(new CustomEvent('maya:standby-requested'))
+      _speechStartTime = 0
       return
     }
     // Wake word já detectada — este é o comando
-    window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text, audioB64: _getLastAudioB64(5) } }))
+    window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text, audioB64: _getSpeechAudioB64() } }))
+    _speechStartTime = 0
     // Reativa com o timeout de conversa — usuário pode falar de novo sem dizer "Maya"
     activateWakeWord(getConversationTimeoutMs())
     return
@@ -160,7 +178,8 @@ function dispatchSpeech(text: string) {
     if (command.length > 2) {
       // "maya, qual o tempo?" — wake word + comando na mesma frase
       activateWakeWord(getConversationTimeoutMs())
-      window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text: command, audioB64: _getLastAudioB64(5) } }))
+      window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text: command, audioB64: _getSpeechAudioB64() } }))
+      _speechStartTime = 0
       // Mantém wake ativo com timeout de conversa (usuário já enviou um comando)
       activateWakeWord(getConversationTimeoutMs())
       console.log(`[maya:mic] wake+comando na mesma frase: "${command}"`)
@@ -359,6 +378,7 @@ function startRecognition() {
   }
 
   rec.onspeechstart = () => {
+    _speechStartTime = Date.now()
     console.log('[maya:mic] onspeechstart')
     window.dispatchEvent(new CustomEvent('maya:status', { detail: { status: 'listening' } }))
   }
