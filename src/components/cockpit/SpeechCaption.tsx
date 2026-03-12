@@ -18,9 +18,16 @@ export default function SpeechCaption() {
     }
 
     const onPartial = (ev: Event) => {
-      const t = (ev as CustomEvent)?.detail?.text as string
+      const detail = (ev as CustomEvent)?.detail
+      const t = detail?.text as string
       if (!t?.trim()) return
       clearHide()
+      // Se está detectando a wake word em standby, mostra sinalizador sutil
+      if (detail?.wakeDetecting) {
+        setVisible(false) // não mostra o texto ainda
+        setIsWakeListening(false)
+        return
+      }
       setText(t.trim())
       setVisible(true)
       setIsFinal(false)

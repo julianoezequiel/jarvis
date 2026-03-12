@@ -49,6 +49,7 @@ export default function SettingsPanel() {
   const [profiles, setProfiles] = useState<{ id: string; name: string; enrolledAt: string }[]>([])
   const [profilesLoading, setProfilesLoading] = useState(false)
   const [verifyEnabled, setVerifyEnabled] = useState(false)
+  const [wakeWordEnabled, setWakeWordEnabled] = useState(true)
   const [deletingProfile, setDeletingProfile] = useState<string | null>(null)
   const [verifyThreshold, setVerifyThreshold] = useState(0.85)
 
@@ -81,6 +82,11 @@ export default function SettingsPanel() {
   const handleToggleVerify = (enabled: boolean) => {
     setVerifyEnabled(enabled)
     localStorage.setItem('maya_speaker_verify_enabled', enabled ? 'true' : 'false')
+  }
+
+  const handleToggleWakeWord = (enabled: boolean) => {
+    setWakeWordEnabled(enabled)
+    localStorage.setItem('maya_wake_word_enabled', enabled ? 'true' : 'false')
   }
 
   const handleThresholdChange = (value: number) => {
@@ -116,6 +122,7 @@ export default function SettingsPanel() {
     }
     // Load voice verify flag + threshold + profiles
     setVerifyEnabled(localStorage.getItem('maya_speaker_verify_enabled') === 'true')
+    setWakeWordEnabled(localStorage.getItem('maya_wake_word_enabled') !== 'false')
     const storedThreshold = localStorage.getItem('maya_verify_threshold')
     if (storedThreshold) setVerifyThreshold(parseFloat(storedThreshold))
     void loadProfiles()
@@ -427,6 +434,27 @@ export default function SettingsPanel() {
                 {profiles.length === 0
                   ? 'Cadastre ao menos uma voz para ativar esta opção'
                   : 'Maya identificará o falante em cada mensagem de voz'}
+              </span>
+            </span>
+          </label>
+
+          {/* Toggle wake word */}
+          <label style={{ ...checkboxRowStyle, alignItems: 'flex-start', gap: 10 }}>
+            <input
+              type="checkbox"
+              checked={wakeWordEnabled}
+              onChange={e => handleToggleWakeWord(e.target.checked)}
+              style={{ ...checkStyle, marginTop: 2 }}
+            />
+            <span>
+              <span style={{ fontSize: '12px', color: '#00d4ff' }}>
+                Ativar por wake word (&quot;Maya, ...&quot;)
+              </span>
+              <br />
+              <span style={{ fontSize: '10px', color: 'rgba(0,212,255,0.38)' }}>
+                {wakeWordEnabled
+                  ? 'Fale &quot;Maya&quot; primeiro — o microfone fica em standby silencioso'
+                  : 'Microfone sempre ativo — toda fala é processada'}
               </span>
             </span>
           </label>

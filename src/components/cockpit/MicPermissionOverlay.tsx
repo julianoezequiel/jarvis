@@ -117,6 +117,10 @@ function deactivateWakeWord() {
   window.dispatchEvent(new CustomEvent('maya:wake-deactivated'))
 }
 
+// Detecta variações fonéticas do nome "Maya" (pt-BR transcreve como "Maia")
+const WAKE_REGEX = /\b(maya|maia|maias|mayas)\b/i
+const WAKE_STRIP_REGEX = /^.*?\b(?:maya|maia|maias|mayas)[,!.?]?\s*/i
+
 // Ponto central de despacho — aplica o gate de wake word
 function dispatchSpeech(text: string) {
   if (!isWakeWordEnabled()) {
@@ -130,9 +134,9 @@ function dispatchSpeech(text: string) {
     deactivateWakeWord()
     return
   }
-  // Modo standby: só processa se contiver "maya"
-  if (/\bmaya\b/i.test(text)) {
-    const command = text.replace(/^.*?\bmaya[,!.?]?\s*/i, '').trim()
+  // Modo standby: só processa se contiver "maya" / "maia" e variações
+  if (WAKE_REGEX.test(text)) {
+    const command = text.replace(WAKE_STRIP_REGEX, '').trim()
     if (command.length > 2) {
       // "maya, qual o tempo?" — wake word + comando na mesma frase
       activateWakeWord()
@@ -223,13 +227,22 @@ function startRecognition() {
         }
       }
 
-      // Emite parcial para exibição na caption (não cancela final pendente)
+      // Emite parcial para exibição na caption
       if (interimText && interimText.trim()) {
         if (_commitTimer) { clearTimeout(_commitTimer); _commitTimer = null } // user still speaking
         _lastInterimTs = Date.now()
         _lastInterimText = interimText.trim()
-        // No modo wake word: só exibe parcial quando wake está ativo (evita mostrar tudo)
-        if (!isWakeWordEnabled() || _wakeActive) {
+        if (isWakeWordEnabled()) {
+          if (_wakeActive) {
+            // Wake ativa: mostra o que o usuário está dizendo
+            window.dispatchEvent(new CustomEvent('maya:speech-partial', { detail: { text: interimText.trim() } }))
+          } else if (WAKE_REGEX.test(interimText)) {
+            // Standby: usuário está dizendo a wake word — sinaliza que detectou
+            window.dispatchEvent(new CustomEvent('maya:speech-partial', { detail: { text: interimText.trim(), wakeDetecting: true } }))
+          }
+          // else: standby sem wake word → sem legenda (silencioso)
+        } else {
+          // Wake word desativado: mostra tudo
           window.dispatchEvent(new CustomEvent('maya:speech-partial', { detail: { text: interimText.trim() } }))
         }
         console.log('[maya:mic] speech interim:', interimText.trim())
