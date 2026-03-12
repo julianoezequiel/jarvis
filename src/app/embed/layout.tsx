@@ -15,7 +15,7 @@ export const metadata = { title: 'Maya Widget' }
 
 export default function EmbedLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" style={{ background: 'transparent' }}>
+    <html suppressHydrationWarning lang="pt-BR" style={{ background: 'transparent' }}>
       <body
         suppressHydrationWarning
         style={{
