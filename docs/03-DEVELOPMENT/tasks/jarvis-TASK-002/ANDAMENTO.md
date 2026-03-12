@@ -3,7 +3,7 @@
 **Task:** JARVIS-TASK-002  
 **Branch:** `feature/jarvis-TASK-002`  
 **Início:** 12/03/2026  
-**Última atualização:** 12/03/2026  
+**Última atualização:** 13/03/2026  
 
 ---
 
@@ -11,7 +11,7 @@
 
 | Fase | Descrição | Status |
 |---|---|---|
-| 1 | Abstração de Banco de Dados (`src/lib/db/`) | ⏳ Não iniciado |
+| 1 | Abstração de Banco de Dados (`src/lib/db/`) | ✅ Concluído |
 | 2 | Widget Core (Orb + Sidebar + Maximizado) | ⏳ Não iniciado |
 | 3 | SettingsModal com 4 abas | ⏳ Não iniciado |
 | 4 | Enrollment Externo via evento | ⏳ Não iniciado |
@@ -55,6 +55,22 @@
 
 ## Log de Atividades
 
+### 13/03/2026
+
+- ✅ Branch `feature/jarvis-TASK-002` criada a partir de `feature/jarvis-setup`
+- ✅ `pg` + `@types/pg` instalados
+- ✅ `src/lib/db/types.ts` criado — `DbAdapter`, `Filter`, `FilterOp`, `SelectOptions` (com `orFilters`)
+- ✅ `src/lib/db/index.ts` criado — lazy singleton factory, `DB_ADAPTER` env var
+- ✅ `src/lib/db/adapters/supabaseAdapter.ts` criado — wrapper Supabase com service role
+- ✅ `src/lib/db/adapters/postgresAdapter.ts` criado — adapter `pg` com queries parametrizadas
+- ✅ `src/app/api/speaker-enroll/route.ts` refatorado (`supabase` → `db`)
+- ✅ `src/app/api/speaker-verify/route.ts` refatorado (`supabase` → `db`)
+- ✅ `src/app/api/oraculo/cycle/route.ts` refatorado (dynamic import removido → `db`)
+- ✅ `src/app/api/maya-memory/route.ts` refatorado (todos os 6 tool cases)
+- ✅ `src/app/api/maya-chat/route.ts` refatorado (user persist + memoryBlock + identity conflict + memory-local persist + openai persist)
+- ✅ `npx tsc --noEmit` — zero erros
+- ✅ Commit `2b9324d`: `feat: Fase 1 - DB adapter abstraction layer (supabase/postgres) (Refs: TASK-002)`
+
 ### 12/03/2026
 
 - ✅ Análise completa do PontoCore frontend realizada
@@ -91,13 +107,12 @@ Este projeto segue metodologias de desenvolvimento profissional. Toda implementa
 
 ## Próximo Passo
 
-**Fase 1 — Abstração de Banco de Dados**
+**Fase 2 — Widget Core (Orb + Sidebar + Maximizado)**
 
-Arquivos a criar/modificar:
-1. `src/lib/db/index.ts` — interface `DbAdapter` + factory
-2. `src/lib/db/adapters/supabase.ts` — wrapper atual
-3. `src/lib/db/adapters/postgres.ts` — adapter `pg`
-4. Refatorar todas as APIs para usar `db/` ao invés de `supabase` diretamente
-5. `database/migrations/001_maya_tables.sql` — script de criação das tabelas
+Componentes a criar:
+1. `src/components/widget/MayaWidget.tsx` — raiz do widget (overlay fixed)
+2. `src/components/widget/MayaOrb.tsx` — orbe draggable com reação a áudio
+3. `src/components/widget/MayaSidebar.tsx` — painel lateral 380px (chat + histórico)
+4. `src/components/widget/MayaMaximized.tsx` — view expandida (cockpit simplificado)
 
-Impacto: ~8 arquivos de API modificados, zero mudança de comportamento externo.
+Pontos de atenção: CSS isolation (Shadow DOM ou CSS modules), mobile-first, zero dependência do host.
