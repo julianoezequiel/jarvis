@@ -293,8 +293,11 @@ function startRecognition() {
 
   rec.onstart = () => {
     console.log('[maya:mic] onstart')
-    // Do NOT update _lastInterimTs here — only real speech (onresult) should set it
-    window.dispatchEvent(new CustomEvent('maya:status', { detail: { status: 'listening' } }))
+    // Only broadcast 'listening' when wake word mode is off or the wake window is open.
+    // In standby (wake enabled + _wakeActive=false), recognition restarts silently — orb stays amber.
+    if (!isWakeWordEnabled() || _wakeActive) {
+      window.dispatchEvent(new CustomEvent('maya:status', { detail: { status: 'listening' } }))
+    }
   }
 
   rec.onend = () => {
