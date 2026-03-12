@@ -443,6 +443,20 @@ function setupListenControl() {
   })
 }
 
+function setupEnrollControl() {
+  // maya:enroll-start — enrollment modal opened: silently deactivate wake word
+  // so Maya won't intercept and respond to the sample phrase being read.
+  window.addEventListener('maya:enroll-start', () => {
+    deactivateWakeWord()
+    window.dispatchEvent(new CustomEvent('maya:status', { detail: { status: 'standby' } }))
+    console.log('[maya:mic] enroll-start — wake word silenced for enrollment')
+  })
+  // maya:enroll-end — modal closed: just log; user re-activates by saying "Maya"
+  window.addEventListener('maya:enroll-end', () => {
+    console.log('[maya:mic] enroll-end — enrollment modal closed')
+  })
+}
+
 // Auto-inicializar microfone quando o boot terminar (sem overlay de permissão)
 if (typeof window !== 'undefined') {
   let _micInitialized = false
@@ -456,6 +470,7 @@ if (typeof window !== 'undefined') {
         _initRollingAudio(stream)
         setupListenControl()
         setupUserMute()
+        setupEnrollControl()
         startRecognition()
         startWatchdog()
         if (isWakeWordEnabled()) {
@@ -467,6 +482,7 @@ if (typeof window !== 'undefined') {
         console.warn('[maya:mic] getUserMedia failed — starting recognition anyway (may be already granted)', e)
         setupListenControl()
         setupUserMute()
+        setupEnrollControl()
         startRecognition()
         startWatchdog()
         if (isWakeWordEnabled()) {

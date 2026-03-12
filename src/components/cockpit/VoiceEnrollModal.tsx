@@ -17,6 +17,11 @@ interface Props {
 
 const RECORD_SECS = 5
 
+/** Texto de amostra para o usuário ler em voz alta durante a gravação.
+ *  ~5 segundos em ritmo normal de fala. Não contém a wake word (Maya/Maia). */
+const SAMPLE_TEXT =
+  'Acesso autorizado. Este sistema registra minha voz para identificação biométrica segura. Confirmando identidade do operador agora.'
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function VoiceEnrollModal({ suggestedName = '', onClose, onEnrolled }: Props) {
@@ -30,6 +35,13 @@ export default function VoiceEnrollModal({ suggestedName = '', onClose, onEnroll
 
   // Focus input when modal opens
   useEffect(() => { inputRef.current?.focus() }, [])
+
+  // Silence Maya while the enrollment modal is open so she doesn't respond
+  // to the sample phrase being read aloud.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('maya:enroll-start'))
+    return () => { window.dispatchEvent(new CustomEvent('maya:enroll-end')) }
+  }, [])
 
   function clearCountdown() {
     if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null }
@@ -174,7 +186,19 @@ export default function VoiceEnrollModal({ suggestedName = '', onClose, onEnroll
           <>
             <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
               Informe o nome da pessoa e clique em <strong style={{ color: '#00d4ff' }}>GRAVAR</strong>.
-              Fale por <strong style={{ color: '#00ff88' }}>{RECORD_SECS} segundos</strong> para criar o perfil de voz.
+              Fale por <strong style={{ color: '#00ff88' }}>{RECORD_SECS} segundos</strong> — leia o texto abaixo em voz alta.
+            </div>
+            {/* Sample text preview */}
+            <div style={{
+              background: 'rgba(0,255,136,0.05)',
+              border: '1px solid rgba(0,255,136,0.2)',
+              borderRadius: 8, padding: '10px 14px',
+              fontSize: 12, color: 'rgba(0,255,136,0.75)',
+              fontFamily: 'Share Tech Mono, monospace', lineHeight: 1.7,
+              letterSpacing: 0.3,
+            }}>
+              <span style={{ fontSize: 9, color: 'rgba(0,255,136,0.45)', display: 'block', marginBottom: 4, letterSpacing: 2 }}>TEXTO DE AMOSTRA</span>
+              &ldquo;{SAMPLE_TEXT}&rdquo;
             </div>
             <input
               ref={inputRef}
@@ -216,10 +240,19 @@ export default function VoiceEnrollModal({ suggestedName = '', onClose, onEnroll
             </div>
 
             <div style={{ fontSize: 12, color: '#00ff88', textAlign: 'center', letterSpacing: 1 }}>
-              🎙 GRAVANDO — fale agora com naturalidade
+              🎙 GRAVANDO — leia o texto abaixo em voz alta
             </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center' }}>
-              Diga seu nome e qualquer frase em voz normal
+            {/* Sample text to read — highlighted during recording */}
+            <div style={{
+              background: 'rgba(0,212,255,0.07)',
+              border: '1px solid rgba(0,212,255,0.35)',
+              borderRadius: 8, padding: '12px 16px',
+              fontSize: 13, color: '#e2e8f0',
+              fontFamily: 'Share Tech Mono, monospace', lineHeight: 1.8,
+              textAlign: 'center', letterSpacing: 0.3,
+              boxShadow: '0 0 16px rgba(0,212,255,0.08)',
+            }}>
+              &ldquo;{SAMPLE_TEXT}&rdquo;
             </div>
           </>
         )}
