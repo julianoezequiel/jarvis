@@ -727,5 +727,19 @@ export function useMayaChat() {
     return () => window.removeEventListener('maya:stop', handler)
   }, [])
 
+  // maya:standby-requested — user said "Maya, pare de escutar" (intercepted before reaching LLM)
+  useEffect(() => {
+    const handler = async () => {
+      // Speak acknowledgement then restore standby orb state
+      await speakText('Certo, Sir. Entrando em modo de espera.', () => {
+        try { window.dispatchEvent(new CustomEvent('maya:status', { detail: { status: 'speaking (standby)' } })) } catch (_) {}
+      })
+      // After TTS finishes, put orb back to standby (not idle)
+      try { window.dispatchEvent(new CustomEvent('maya:status', { detail: { status: 'standby' } })) } catch (_) {}
+    }
+    window.addEventListener('maya:standby-requested', handler as EventListener)
+    return () => window.removeEventListener('maya:standby-requested', handler as EventListener)
+  }, [])
+
   return { messages, status: _status, listenEnabled, setListen, sendMessage, addUserMessage, stopAudio, clear }
 }

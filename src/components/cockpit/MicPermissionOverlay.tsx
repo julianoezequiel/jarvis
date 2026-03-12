@@ -129,6 +129,9 @@ function deactivateWakeWord() {
 const WAKE_REGEX = /\b(maya|maia|maias|mayas)\b/i
 const WAKE_STRIP_REGEX = /^.*?\b(?:maya|maia|maias|mayas)[,!.?]?\s*/i
 
+// Comandos de voz para entrar em standby ("Maya, pare de escutar")
+const STANDBY_REGEX = /\b(pare?|encerra?|desativ[ae]|desligue?|modo\s+stand.?by|modo\s+espera|stop\s+listening)\b[^.!?]*\b(escutar|ouvir|escuta)\b|\bstop\s+listening\b|\bvolte?\s+ao\s+stand.?by\b|\bmode?o?\s+stand.?by\b/i
+
 // Ponto central de despacho — aplica o gate de wake word
 function dispatchSpeech(text: string) {
   if (!isWakeWordEnabled()) {
@@ -137,6 +140,13 @@ function dispatchSpeech(text: string) {
     return
   }
   if (_wakeActive) {
+    // Verifica se é um comando de standby antes de enviar à IA
+    if (STANDBY_REGEX.test(text)) {
+      console.log('[maya:mic] standby command detected — deactivating wake word')
+      deactivateWakeWord()
+      window.dispatchEvent(new CustomEvent('maya:standby-requested'))
+      return
+    }
     // Wake word já detectada — este é o comando
     window.dispatchEvent(new CustomEvent('maya:speech', { detail: { text, audioB64: _getLastAudioB64(5) } }))
     // Reativa com o timeout de conversa — usuário pode falar de novo sem dizer "Maya"
