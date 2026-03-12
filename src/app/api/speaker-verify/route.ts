@@ -10,7 +10,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyAgainstProfiles, VoiceProfile } from '../../../lib/voskSpeaker'
-import { supabase } from '../../../lib/supabase'
+import { db } from '../../../lib/db'
 
 const CATEGORY = 'voice_profile'
 
@@ -32,18 +32,19 @@ export async function POST(req: NextRequest) {
   }
 
   // Fetch all enrolled profiles
-  const { data, error } = await supabase
-    .from('user_facts')
-    .select('fact')
-    .eq('category', CATEGORY)
-
-  if (error) {
-    console.error('[speaker-verify] Supabase fetch error:', error)
+  let rows: { fact: string }[]
+  try {
+    rows = await db.select<{ fact: string }>('user_facts', {
+      columns: 'fact',
+      filters: [{ column: 'category', op: 'eq', value: CATEGORY }],
+    })
+  } catch (err) {
+    console.error('[speaker-verify] DB fetch error:', err)
     // Fail open: if DB is down, don't block users
     return NextResponse.json({ match: true, speaker: null, confidence: 1.0, reason: 'no_enrollment' })
   }
 
-  const profiles: VoiceProfile[] = (data || [])
+  const profiles: VoiceProfile[] = rows
     .map((row: { fact: string }) => {
       try {
         const p = JSON.parse(row.fact)

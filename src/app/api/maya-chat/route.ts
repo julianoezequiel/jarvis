@@ -69,7 +69,7 @@ export async function POST(req: Request) {
     const reqUrl = new URL(req.url)
     const baseUrl = `${reqUrl.protocol}//${reqUrl.host}`
 
-    // Persist the user message into jarvis_memory (prefer service role)
+    // Persist the user message into jarvis_memory (best-effort)
     const userRecord = {
       role: 'user',
       content: userMessage,
@@ -78,47 +78,23 @@ export async function POST(req: Request) {
       created_at: new Date().toISOString(),
     }
     try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-      const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE || ''
-      let supabaseClient: any = null
-      if (serviceRole && supabaseUrl) {
-        const { createClient } = await import('@supabase/supabase-js')
-        supabaseClient = createClient(supabaseUrl, serviceRole)
-      } else {
-        try {
-          const mod = await import('../../../lib/supabase')
-          supabaseClient = mod.supabase
-        } catch (e) {
-          console.warn('supabase client not available for maya-chat', String(e))
-        }
-      }
-      if (supabaseClient) {
-        try {
-          const insertRes = await supabaseClient.from('jarvis_memory').insert([userRecord]).select()
-          if (insertRes?.error) console.warn('jarvis_memory insert failed', insertRes.error)
-        } catch (err) {
-          console.warn('jarvis_memory insert failed', err)
-        }
-      } else {
-        // fallback: append to local file
-        try {
-          const fs = await import('fs')
-          const path = await import('path')
-          const LOCAL_STORE_DIR = path.resolve(process.cwd(), 'data')
-          const LOCAL_STORE_PATH = path.join(LOCAL_STORE_DIR, 'local_memory.json')
-          if (!fs.existsSync(LOCAL_STORE_DIR)) fs.mkdirSync(LOCAL_STORE_DIR, { recursive: true })
-          if (!fs.existsSync(LOCAL_STORE_PATH)) fs.writeFileSync(LOCAL_STORE_PATH, JSON.stringify({ memories: [], facts: [] }, null, 2), 'utf8')
-          const raw = fs.readFileSync(LOCAL_STORE_PATH, 'utf8')
-          const obj = JSON.parse(raw || '{}')
-          obj.memories = obj.memories || []
-          obj.memories.push({ id: String(Date.now()), content: userMessage, role: 'user', session_id: sessionId, created_at: new Date().toISOString() })
-          fs.writeFileSync(LOCAL_STORE_PATH, JSON.stringify(obj, null, 2), 'utf8')
-        } catch (e) {
-          console.warn('local fallback write failed', String(e))
-        }
-      }
-    } catch (e) {
-      console.warn('persist user message failed', String(e))
+      const { db } = await import('../../../lib/db')
+      await db.insert('jarvis_memory', userRecord)
+    } catch (_err) {
+      // best-effort: fallback to local file
+      try {
+        const fs = await import('fs')
+        const pathMod = await import('path')
+        const LOCAL_STORE_DIR = pathMod.resolve(process.cwd(), 'data')
+        const LOCAL_STORE_PATH = pathMod.join(LOCAL_STORE_DIR, 'local_memory.json')
+        if (!fs.existsSync(LOCAL_STORE_DIR)) fs.mkdirSync(LOCAL_STORE_DIR, { recursive: true })
+        if (!fs.existsSync(LOCAL_STORE_PATH)) fs.writeFileSync(LOCAL_STORE_PATH, JSON.stringify({ memories: [], facts: [] }, null, 2), 'utf8')
+        const raw = fs.readFileSync(LOCAL_STORE_PATH, 'utf8')
+        const obj = JSON.parse(raw || '{}') as { memories: unknown[] }
+        obj.memories = obj.memories || []
+        obj.memories.push({ id: String(Date.now()), ...userRecord })
+        fs.writeFileSync(LOCAL_STORE_PATH, JSON.stringify(obj, null, 2), 'utf8')
+      } catch (_localErr) { /* ignore */ }
     }
 
     const recentMessages = Array.isArray(body?.recentMessages) ? (body.recentMessages as any[]).slice(-8) : []
@@ -194,55 +170,50 @@ export async function POST(req: Request) {
         body: JSON.stringify({ tool: 'remember_fact', payload: { fact: factToSave, category: 'identity', importance: 4, source: 'auto-identity' } }),
       }).catch(() => { /* ignore */ })
     }
-    let memoryBlock: { memories?: any[]; facts?: any[] } | undefined = undefined
+    let memoryBlock: { memories?: unknown[]; facts?: unknown[] } | undefined = undefined
     if (sessionId) {
       try {
-        const mod = await import('../../../lib/supabase')
-        const supabaseClient: any = mod.supabase
-        if (supabaseClient) {
-          try {
-            // Extract keywords (words > 3 chars) for relevant fact search
-            const keywords = (userMessage || '').split(/\s+/).filter((w: string) => w.length > 3).slice(0, 4)
+        const { db } = await import('../../../lib/db')
+        // Extract keywords (words > 3 chars) for relevant fact search
+        const keywords = (userMessage || '').split(/\s+/).filter((w: string) => w.length > 3).slice(0, 4)
 
-            // Run session memories + relevant-fact search in parallel
-            let factQuery: any
-            if (keywords.length > 0) {
-              const orFilter = keywords.map((k: string) => `fact.ilike.%${k}%`).join(',')
-              factQuery = supabaseClient.from('user_facts').select('*').or(orFilter).order('importance', { ascending: false }).limit(6)
-            } else {
-              factQuery = supabaseClient.from('user_facts').select('*').order('created_at', { ascending: false }).limit(6)
+        const factSelectOptions = keywords.length > 0
+          ? {
+              orFilters: keywords.map((k: string) => ({ column: 'fact', op: 'ilike' as const, value: `%${k}%` })),
+              orderBy: { column: 'importance', ascending: false },
+              limit: 6,
             }
+          : { orderBy: { column: 'created_at', ascending: false }, limit: 6 }
 
-            const [sessionRes, factRes]: any[] = await Promise.all([
-              supabaseClient.from('jarvis_memory').select('*').eq('session_id', sessionId).order('created_at', { ascending: false }).limit(8),
-              factQuery,
-            ])
+        const [sessionRows, factRows] = await Promise.all([
+          db.select('jarvis_memory', {
+            filters: [{ column: 'session_id', op: 'eq', value: sessionId }],
+            orderBy: { column: 'created_at', ascending: false },
+            limit: 8,
+          }),
+          db.select('user_facts', factSelectOptions),
+        ])
 
-            // If keyword search returned nothing, fall back to most recent facts
-            let factsData: any[] = factRes.data || []
-            if (factsData.length === 0) {
-              const recentFacts = await supabaseClient.from('user_facts').select('*').order('created_at', { ascending: false }).limit(6)
-              factsData = recentFacts.data || []
-            }
-
-            // filter out the just-received userMessage from session memories
-            const mems = (sessionRes.data || []).filter((m: any) => String((m.content || '')).trim() !== String(userMessage || '').trim()).slice(0, 6)
-            memoryBlock = { memories: mems, facts: factsData }
-          } catch (e) {
-            // ignore and fallback to local file below
-            memoryBlock = undefined
-          }
+        let factsData = factRows
+        if (factsData.length === 0) {
+          factsData = await db.select('user_facts', { orderBy: { column: 'created_at', ascending: false }, limit: 6 })
         }
-      } catch (e) {
+
+        // filter out the just-received userMessage from session memories
+        const mems = sessionRows
+          .filter((m: unknown) => String(((m as Record<string, unknown>).content || '')).trim() !== String(userMessage || '').trim())
+          .slice(0, 6)
+        memoryBlock = { memories: mems, facts: factsData }
+      } catch (_dbErr) {
         // local fallback: read data/local_memory.json if present
         try {
           const fs = await import('fs')
-          const path = await import('path')
-          const LOCAL_STORE_PATH = path.join(process.cwd(), 'data', 'local_memory.json')
+          const pathMod = await import('path')
+          const LOCAL_STORE_PATH = pathMod.join(process.cwd(), 'data', 'local_memory.json')
           if (fs.existsSync(LOCAL_STORE_PATH)) {
             const raw = fs.readFileSync(LOCAL_STORE_PATH, 'utf8')
-            const obj = JSON.parse(raw || '{}')
-            const memories = (obj.memories || []).filter((m: any) => String(m.session_id || '').toLowerCase() === String(sessionId).toLowerCase()).slice(0, 6)
+            const obj = JSON.parse(raw || '{}') as { memories: unknown[]; facts: unknown[] }
+            const memories = (obj.memories || []).filter((m: unknown) => String(((m as Record<string, unknown>).session_id || '')).toLowerCase() === String(sessionId).toLowerCase()).slice(0, 6)
             const facts = (obj.facts || []).slice(0, 6)
             memoryBlock = { memories, facts }
           }
@@ -252,23 +223,18 @@ export async function POST(req: Request) {
 
     // Detectar troca de pessoa: se nome declarado difere do nome armazenado → limpar user_facts
     if (declaredName && memoryBlock) {
-      const existingNameFact = (memoryBlock.facts || []).find((f: any) =>
-        /^(?:meu nome|me chamo)/i.test(f.fact || '')
-      )
+      const existingNameFact = (memoryBlock.facts || []).find((f) =>
+        /^(?:meu nome|me chamo)/i.test((f as Record<string, unknown>).fact as string || '')
+      ) as Record<string, unknown> | undefined
       if (existingNameFact) {
         const storedName = (existingNameFact.fact as string)
           .replace(/^(?:meu nome\s+[eé]\s+|me chamo\s+)/i, '').trim()
         if (storedName.toLowerCase() !== declaredName.toLowerCase()) {
           // Nova pessoa — apagar fatos antigos e salvar nova identidade
           try {
-            const { createClient } = await import('@supabase/supabase-js')
-            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-            const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-            if (supabaseUrl && serviceRole) {
-              const adminClient = createClient(supabaseUrl, serviceRole)
-              await adminClient.from('user_facts').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-              await adminClient.from('user_facts').insert([{ fact: userMessage.trim(), category: 'identity', importance: 5, source: 'new-person' }])
-            }
+            const { db } = await import('../../../lib/db')
+            await db.delete('user_facts', [])
+            await db.insert('user_facts', { fact: userMessage.trim(), category: 'identity', importance: 5, source: 'new-person' })
           } catch (_) { /* ignore */ }
           memoryBlock = { memories: [], facts: [{ fact: userMessage.trim(), category: 'identity', importance: 5 }] }
         }
@@ -295,24 +261,16 @@ export async function POST(req: Request) {
     try {
       const vagueRef = /(^|\s)(sobre que|qual assunto|do que eu falei|sobre quem|de quem eu falei|sobre isso|o que eu disse|sobre o que|do que trat)(\s|\?|$)/i
       if (vagueRef.test(userMessage) && memoryBlock && ((memoryBlock.facts && memoryBlock.facts.length) || (memoryBlock.memories && memoryBlock.memories.length))) {
-        const rawFact = (memoryBlock.facts && memoryBlock.facts[0] && (memoryBlock.facts[0].fact || memoryBlock.facts[0].content)) || (memoryBlock.memories && memoryBlock.memories[0] && (memoryBlock.memories[0].content || memoryBlock.memories[0].fact)) || ''
+        const f0 = memoryBlock.facts && memoryBlock.facts[0] as Record<string, unknown> | undefined
+        const m0 = memoryBlock.memories && memoryBlock.memories[0] as Record<string, unknown> | undefined
+        const rawFact = (f0 && (String(f0.fact ?? '') || String(f0.content ?? ''))) || (m0 && (String(m0.content ?? '') || String(m0.fact ?? ''))) || ''
         // Clean up: strip common "lembro/memorize" prefixes so the answer is more natural
         const cleaned = rawFact.replace(/^(memorize( a palavra| o assunto| sobre)?|lembre(-se)?( de| que)?|guarde)\s+/i, '').trim()
         const assistantText = cleaned ? `Você falou sobre: ${cleaned}` : 'Não encontrei o contexto exato da nossa conversa anterior.'
         // Persist assistant response into jarvis_memory (best-effort)
         try {
-          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-          const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE || ''
-          let supabaseClient: any = null
-          if (serviceRole && supabaseUrl) {
-            const { createClient } = await import('@supabase/supabase-js')
-            supabaseClient = createClient(supabaseUrl, serviceRole)
-          } else {
-            try { const mod = await import('../../../lib/supabase'); supabaseClient = mod.supabase } catch (_) { /* ignore */ }
-          }
-          if (supabaseClient) {
-            await supabaseClient.from('jarvis_memory').insert([{ role: 'assistant', content: assistantText, session_id: sessionId, importance: 1, created_at: new Date().toISOString() }])
-          }
+          const { db } = await import('../../../lib/db')
+          await db.insert('jarvis_memory', { role: 'assistant', content: assistantText, session_id: sessionId, importance: 1, created_at: new Date().toISOString() })
         } catch (_) { /* ignore persistence errors */ }
         return new Response(JSON.stringify({ text: assistantText, provider: 'memory-local' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       }
@@ -467,38 +425,24 @@ export async function POST(req: Request) {
             created_at: new Date().toISOString(),
           }
           try {
-            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-            const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE || ''
-            let supabaseClient: any = null
-            if (serviceRole && supabaseUrl) {
-              const { createClient } = await import('@supabase/supabase-js')
-              supabaseClient = createClient(supabaseUrl, serviceRole)
-            } else {
-              try { const mod = await import('../../../lib/supabase'); supabaseClient = mod.supabase } catch (e) { /* ignore */ }
-            }
-            if (supabaseClient) {
-              try {
-                const insertRes = await supabaseClient.from('jarvis_memory').insert([assistantRecord]).select()
-                if (insertRes?.error) console.warn('jarvis_memory insert failed', insertRes.error)
-              } catch (err) {
-                console.warn('jarvis_memory insert failed', err)
-              }
-            }
-            else {
-              // local fallback
+            const { db } = await import('../../../lib/db')
+            await db.insert('jarvis_memory', assistantRecord)
+          } catch (_dbErr) {
+            // local fallback
+            try {
               const fs = await import('fs')
-              const path = await import('path')
-              const LOCAL_STORE_DIR = path.resolve(process.cwd(), 'data')
-              const LOCAL_STORE_PATH = path.join(LOCAL_STORE_DIR, 'local_memory.json')
+              const pathMod = await import('path')
+              const LOCAL_STORE_DIR = pathMod.resolve(process.cwd(), 'data')
+              const LOCAL_STORE_PATH = pathMod.join(LOCAL_STORE_DIR, 'local_memory.json')
               if (!fs.existsSync(LOCAL_STORE_DIR)) fs.mkdirSync(LOCAL_STORE_DIR, { recursive: true })
               if (!fs.existsSync(LOCAL_STORE_PATH)) fs.writeFileSync(LOCAL_STORE_PATH, JSON.stringify({ memories: [], facts: [] }, null, 2), 'utf8')
               const raw = fs.readFileSync(LOCAL_STORE_PATH, 'utf8')
-              const obj = JSON.parse(raw || '{}')
+              const obj = JSON.parse(raw || '{}') as { memories: unknown[] }
               obj.memories = obj.memories || []
               obj.memories.push({ id: String(Date.now()), content: assistantText, role: 'assistant', session_id: sessionId, created_at: new Date().toISOString() })
               fs.writeFileSync(LOCAL_STORE_PATH, JSON.stringify(obj, null, 2), 'utf8')
-            }
-          } catch (e) { console.warn('persist assistant message failed', String(e)) }
+            } catch (_) { /* ignore */ }
+          }
 
           return new Response(JSON.stringify({ text, provider: 'openai' }), {
             status: 200,

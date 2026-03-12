@@ -1,4 +1,4 @@
-import { supabase, saveMayaFile } from '../../../lib/supabase'
+import { db } from '../../../lib/db'
 import fs from 'fs'
 import path from 'path'
 
@@ -103,18 +103,15 @@ export async function POST(req: Request) {
           return new Response(JSON.stringify({ error: 'missing fact' }), { status: 400 })
         }
         try {
-          const { data, error } = await supabase.from('user_facts').insert([
-            { fact: p.fact, category: p.category || null, importance: p.importance || 1, source: p.source || null }
-          ])
-          if (error) {
-            // Fallback to local store
-            const row = appendFactLocal(p)
-            if (row) return new Response(JSON.stringify({ ok: true, data: [row], fallback: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-            return new Response(JSON.stringify({ error: error.message }), { status: 500 })
-          }
-          return new Response(JSON.stringify({ ok: true, data }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-        } catch (e: any) {
-          // Supabase client failed — write locally
+          await db.insert('user_facts', {
+            fact: p.fact,
+            category: p.category || null,
+            importance: p.importance || 1,
+            source: p.source || null,
+          })
+          return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        } catch (e: unknown) {
+          // Fallback to local store
           const row = appendFactLocal(p)
           if (row) return new Response(JSON.stringify({ ok: true, data: [row], fallback: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
           return new Response(JSON.stringify({ error: String(e) }), { status: 500 })
@@ -127,39 +124,37 @@ export async function POST(req: Request) {
           return new Response(JSON.stringify({ error: 'missing query or sessionId' }), { status: 400 })
         }
 
-        // If sessionId provided, prefer returning recent session-scoped memories (helps conversational recall)
+        const q = `%${query || ''}%`
         try {
           if (sessionId) {
-            const sessionRes = await supabase.from('jarvis_memory').select('*').eq('session_id', sessionId).order('created_at', { ascending: false }).limit(limit)
-            if (!sessionRes.error) {
-              // still search facts by query if query provided
-              let factRes: any = { data: [], error: null }
-              if (query) {
-                const q = `%${query}%`
-                factRes = await supabase.from('user_facts').select('*').ilike('fact', q).limit(limit)
-              }
-              if (sessionRes.error || factRes.error) {
-                const local = searchLocal(query || '', limit, sessionId)
-                return new Response(JSON.stringify({ ok: true, memories: local.memories, facts: local.facts, fallback: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-              }
-              return new Response(JSON.stringify({ ok: true, memories: sessionRes.data || [], facts: (factRes.data || []) }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-            }
+            const [memRows, factRows] = await Promise.all([
+              db.select('jarvis_memory', {
+                filters: [{ column: 'session_id', op: 'eq', value: sessionId }],
+                orderBy: { column: 'created_at', ascending: false },
+                limit,
+              }),
+              query
+                ? db.select('user_facts', {
+                    filters: [{ column: 'fact', op: 'ilike', value: q }],
+                    limit,
+                  })
+                : Promise.resolve([]),
+            ])
+            return new Response(JSON.stringify({ ok: true, memories: memRows, facts: factRows }), { status: 200, headers: { 'Content-Type': 'application/json' } })
           }
 
-          // Fallback: perform text search across memories and facts
-          const q = `%${query || ''}%`
-          const [memRes, factRes] = await Promise.all([
-            supabase.from('jarvis_memory').select('*').ilike('content', q).limit(limit),
-            supabase.from('user_facts').select('*').ilike('fact', q).limit(limit)
+          const [memRows, factRows] = await Promise.all([
+            db.select('jarvis_memory', {
+              filters: [{ column: 'content', op: 'ilike', value: q }],
+              limit,
+            }),
+            db.select('user_facts', {
+              filters: [{ column: 'fact', op: 'ilike', value: q }],
+              limit,
+            }),
           ])
-
-          if (memRes.error || factRes.error) {
-            const local = searchLocal(query || '', limit, sessionId)
-            return new Response(JSON.stringify({ ok: true, memories: local.memories, facts: local.facts, fallback: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-          }
-
-          return new Response(JSON.stringify({ ok: true, memories: memRes.data || [], facts: factRes.data || [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-        } catch (e) {
+          return new Response(JSON.stringify({ ok: true, memories: memRows, facts: factRows }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        } catch (e: unknown) {
           const local = searchLocal(query || '', limit, sessionId)
           return new Response(JSON.stringify({ ok: true, memories: local.memories, facts: local.facts, fallback: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
         }
@@ -170,9 +165,16 @@ export async function POST(req: Request) {
         if (!p?.path || !p?.content) {
           return new Response(JSON.stringify({ error: 'missing path or content' }), { status: 400 })
         }
-        const res = await saveMayaFile(p.path, p.content, p.project_name || undefined)
-        if (res.error) return new Response(JSON.stringify({ error: res.error.message }), { status: 500 })
-        return new Response(JSON.stringify({ ok: true, data: res.data }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        try {
+          await db.insert('jarvis_files', {
+            path: p.path,
+            content: p.content,
+            project_name: p.project_name || null,
+          })
+          return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        } catch (e: unknown) {
+          return new Response(JSON.stringify({ error: String(e) }), { status: 500 })
+        }
       }
 
       case 'save_project': {
@@ -180,10 +182,13 @@ export async function POST(req: Request) {
         if (!project_name || !Array.isArray(files) || files.length === 0) {
           return new Response(JSON.stringify({ error: 'missing project_name or files' }), { status: 400 })
         }
-        const rows = files.map((f) => ({ path: f.path, content: f.content, project_name }))
-        const { data, error } = await supabase.from('jarvis_files').insert(rows)
-        if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 })
-        return new Response(JSON.stringify({ ok: true, data }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        try {
+          const rows = files.map((f) => ({ path: f.path, content: f.content, project_name }))
+          await db.insert('jarvis_files', rows)
+          return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        } catch (e: unknown) {
+          return new Response(JSON.stringify({ error: String(e) }), { status: 500 })
+        }
       }
 
       case 'save_agent_knowledge': {
@@ -193,62 +198,54 @@ export async function POST(req: Request) {
         if (!agent_id || !knowledgeContent) {
           return new Response(JSON.stringify({ error: 'missing agent_id or content' }), { status: 400 })
         }
-        const { data, error } = await supabase.from('agent_knowledge').insert([{
-          agent_id,
-          skill_name: skill_name || 'general',
-          content: knowledgeContent,
-          quality,
-          created_at: new Date().toISOString(),
-        }])
-        if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 })
-        return new Response(JSON.stringify({ ok: true, data }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        try {
+          await db.insert('agent_knowledge', {
+            agent_id,
+            skill_name: skill_name || 'general',
+            content: knowledgeContent,
+            quality,
+            created_at: new Date().toISOString(),
+          })
+          return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        } catch (e: unknown) {
+          return new Response(JSON.stringify({ error: String(e) }), { status: 500 })
+        }
       }
 
       case 'clear_memory': {
         const { scope = 'all', sessionId: clearSessionId } = payload as { scope?: 'all' | 'history' | 'facts'; sessionId?: string }
-        let errors: string[] = []
+        const errors: string[] = []
 
-        // Clear Supabase tables — usa service role para garantir que o DELETE passa pelo RLS
+        // Clear DB tables — db adapter uses service role when available (bypasses RLS)
         try {
-          const { createClient } = await import('@supabase/supabase-js')
-          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-          const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE || ''
-          const adminClient = serviceRole
-            ? createClient(supabaseUrl, serviceRole)
-            : supabase // fallback para anon key se não houver service role
-
           if (scope === 'all' || scope === 'history') {
-            const q = clearSessionId
-              ? adminClient.from('jarvis_memory').delete().eq('session_id', clearSessionId)
-              : adminClient.from('jarvis_memory').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-            const res = await q
-            if (res.error) errors.push(`jarvis_memory: ${res.error.message}`)
+            const filters = clearSessionId
+              ? [{ column: 'session_id', op: 'eq' as const, value: clearSessionId }]
+              : []
+            await db.delete('jarvis_memory', filters)
           }
           if (scope === 'all' || scope === 'facts') {
-            const res = await adminClient.from('user_facts').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-            if (res.error) errors.push(`user_facts: ${res.error.message}`)
+            await db.delete('user_facts', [])
           }
-        } catch (e) {
-          errors.push(`supabase: ${String(e)}`)
+        } catch (e: unknown) {
+          errors.push(`db: ${String(e)}`)
         }
 
-        // Clear local JSON file
+        // Clear local JSON file (kept for resilience / offline use)
         try {
           ensureLocalStore()
-          const obj: { memories: any[]; facts: any[] } = { memories: [], facts: [] }
+          const obj: { memories: unknown[]; facts: unknown[] } = { memories: [], facts: [] }
           if (scope === 'history') {
-            // keep facts, only clear memories
             const raw = fs.readFileSync(LOCAL_STORE_PATH, 'utf8')
-            const existing = JSON.parse(raw || '{}')
+            const existing = JSON.parse(raw || '{}') as { memories: unknown[]; facts: unknown[] }
             obj.facts = existing.facts || []
           } else if (scope === 'facts') {
-            // keep memories, only clear facts
             const raw = fs.readFileSync(LOCAL_STORE_PATH, 'utf8')
-            const existing = JSON.parse(raw || '{}')
+            const existing = JSON.parse(raw || '{}') as { memories: unknown[]; facts: unknown[] }
             obj.memories = existing.memories || []
           }
           fs.writeFileSync(LOCAL_STORE_PATH, JSON.stringify(obj, null, 2), 'utf8')
-        } catch (e) {
+        } catch (e: unknown) {
           errors.push(`local: ${String(e)}`)
         }
 

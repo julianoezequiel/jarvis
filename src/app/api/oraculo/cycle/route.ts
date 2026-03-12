@@ -4,6 +4,7 @@
  * Executa pesquisa autônoma sobre tópicos de interesse,
  * salva os resultados em oraculo_knowledge.
  */
+import { db } from '../../../../lib/db'
 
 const ORACULO_TOPICS = [
   'tendências em inteligência artificial e LLMs',
@@ -19,19 +20,6 @@ export async function POST(req: Request) {
     const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
     if (!ANTHROPIC_API_KEY) {
       return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY não configurada' }), { status: 500 })
-    }
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-    const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE || ''
-    let supabaseClient: any = null
-    if (serviceRole && supabaseUrl) {
-      const { createClient } = await import('@supabase/supabase-js')
-      supabaseClient = createClient(supabaseUrl, serviceRole)
-    } else {
-      try {
-        const mod = await import('../../../../lib/supabase')
-        supabaseClient = mod.supabase
-      } catch (_) {}
     }
 
     const results: { topic: string; content: string; quality: number }[] = []
@@ -78,21 +66,21 @@ Regras:
       })
     )
 
-    // Persiste os resultados no Supabase
+    // Persiste os resultados
     let savedCount = 0
-    if (supabaseClient && results.length > 0) {
-      const rows = results.map((r) => ({
-        topic: r.topic,
-        content: r.content,
-        source: 'oraculo-cycle',
-        quality: r.quality,
-        created_at: new Date().toISOString(),
-      }))
-      const { error } = await supabaseClient.from('oraculo_knowledge').insert(rows)
-      if (error) {
-        console.error('[oraculo] erro ao salvar no Supabase:', error)
-      } else {
+    if (results.length > 0) {
+      try {
+        const rows = results.map((r) => ({
+          topic: r.topic,
+          content: r.content,
+          source: 'oraculo-cycle',
+          quality: r.quality,
+          created_at: new Date().toISOString(),
+        }))
+        await db.insert('oraculo_knowledge', rows)
         savedCount = rows.length
+      } catch (err) {
+        console.error('[oraculo] erro ao salvar no banco:', err)
       }
     }
 

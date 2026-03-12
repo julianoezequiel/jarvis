@@ -11,7 +11,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { extractEmbedding } from '../../../lib/voskSpeaker'
-import { supabase } from '../../../lib/supabase'
+import { db } from '../../../lib/db'
 
 const CATEGORY = 'voice_profile'
 
@@ -47,26 +47,22 @@ export async function POST(req: NextRequest) {
     return jsonErr('No voice detected in the audio clip. Please speak clearly for at least 3 seconds.', 422)
   }
 
-  // Upsert into Supabase user_facts (one row per person)
-  // We use name as unique key within category=voice_profile
+  // Upsert: delete any existing profile for this name, then insert fresh
   const fact = JSON.stringify({ name: cleanName, voiceprint: embedding })
 
-  // Delete any existing profile for this name first (upsert-style)
-  await supabase
-    .from('user_facts')
-    .delete()
-    .eq('category', CATEGORY)
-    .like('fact', `%"name":"${cleanName}"%`)
-
-  const { error } = await supabase.from('user_facts').insert({
-    fact,
-    category: CATEGORY,
-    importance: 5,
-    source: 'speaker-enroll',
-  })
-
-  if (error) {
-    console.error('[speaker-enroll] Supabase insert error:', error)
+  try {
+    await db.delete('user_facts', [
+      { column: 'category', op: 'eq', value: CATEGORY },
+      { column: 'fact', op: 'like', value: `%"name":"${cleanName}"%` },
+    ])
+    await db.insert('user_facts', {
+      fact,
+      category: CATEGORY,
+      importance: 5,
+      source: 'speaker-enroll',
+    })
+  } catch (err) {
+    console.error('[speaker-enroll] DB error:', err)
     return jsonErr('Failed to save voice profile', 500)
   }
 
@@ -76,17 +72,18 @@ export async function POST(req: NextRequest) {
 // ── GET — list profiles ───────────────────────────────────────────────────────
 
 export async function GET() {
-  const { data, error } = await supabase
-    .from('user_facts')
-    .select('id, fact, created_at')
-    .eq('category', CATEGORY)
-    .order('created_at', { ascending: true })
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  let rows: { id: string; fact: string; created_at: string }[]
+  try {
+    rows = await db.select<{ id: string; fact: string; created_at: string }>('user_facts', {
+      columns: 'id, fact, created_at',
+      filters: [{ column: 'category', op: 'eq', value: CATEGORY }],
+      orderBy: { column: 'created_at', ascending: true },
+    })
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 
-  const profiles = (data || []).map((row: any) => {
+  const profiles = rows.map((row) => {
     try {
       const parsed = JSON.parse(row.fact)
       return { id: row.id, name: parsed.name as string, enrolledAt: row.created_at }
@@ -113,14 +110,13 @@ export async function DELETE(req: NextRequest) {
     return jsonErr('name is required')
   }
 
-  const { error } = await supabase
-    .from('user_facts')
-    .delete()
-    .eq('category', CATEGORY)
-    .like('fact', `%"name":"${name.trim()}"%`)
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  try {
+    await db.delete('user_facts', [
+      { column: 'category', op: 'eq', value: CATEGORY },
+      { column: 'fact', op: 'like', value: `%"name":"${name.trim()}"%` },
+    ])
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 
   return NextResponse.json({ ok: true })

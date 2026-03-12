@@ -22,11 +22,13 @@
     "next": "^15.0.0",
     "node-fetch": "^2.7.0",
     "pdf-parse": "^1.1.1",
+    "pg": "^8.20.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@types/node": "^20.5.1",
+    "@types/pg": "^8.18.0",
     "@types/react": "^18.2.21",
     "eslint": "^8.45.0",
     "eslint-config-next": "^14.0.0",

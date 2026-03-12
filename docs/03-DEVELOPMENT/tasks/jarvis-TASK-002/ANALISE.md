@@ -9,7 +9,7 @@
 
 ## 1. Contexto e Motivação
 
-O layout atual (`/cockpit` — Iron Man) foi construído como **POC de funcionalidades**. O objetivo agora é transformar a Maya em um **widget embeddável**, que possa:
+O layout `/cockpit` (Iron Man) foi a **versão fundacional** do produto — utilizada para validar e consolidar todas as funcionalidades core (chat SSE, agentes, speaker ID, memória, TTS). Esta é agora a **fase de produto oficial**, onde a arquitetura evoluirá para um widget embeddável de nível produção. O objetivo é transformar a Maya em um **widget embeddável**, que possa:
 
 - Funcionar como camada flutuante sobre **qualquer sistema web** (PontoCore, sistemas de terceiros)
 - Ser integrado no PontoCore Frontend (Angular 14 / Fuse) substituindo o `quick-chat` existente
@@ -102,16 +102,17 @@ window.dispatchEvent(new CustomEvent('maya:enroll-voice', {
 ### 4.1 Três estados de exibição
 
 ```
-MINIMIZADO                SIDEBAR                    MAXIMIZADO
-───────────               ──────────────────         ──────────────────────────
-                          ┌─ 380px ──────────┐       ┌───┬──────────┬─────────┐
-                          │ ● Orb + nome     │       │ A │  Chat    │  Docs   │
-  ●  ← (canto inf dir)    │ ─────────────    │       │ g │  (SSE)   │ Files   │
-                          │ Mensagens (SSE)  │       │ e │          │         │
-                          │                  │       │ n │ [input]  │         │
-                          │ [input] ▶ ⊞      │       │ t │  🎤  ⚙  │         │
-                          │ 🎤  ⚙  [min ×]  │       │ s │          │         │
-                          └──────────────────┘       └───┴──────────┴─────────┘
+MINIMIZADO                      SIDEBAR (direita, padrão)          MAXIMIZADO
+──────────────────────────────  ────────────────────────────────   ──────────────────────────────────
+                                                 ┌─ 380px ──────┐  ┌──────────────┬───────┬─────────┐
+                                                 │ ● Orb + nome │  │     Chat     │Agentes│  Docs   │
+┌──────────────────────────┐                    │ ───────────── │  │    (SSE)     │       │ Files   │
+│                          │                    │ Mensagens SSE │  │              │       │         │
+│   Sistema do cliente     │                    │               │  │  [input] ▶   │       │         │
+│                          │                    │  [input] ▶ ⊞  │  │  🎤  ⚙  ×   │       │         │
+│                       ● ←┘ ← canto inf dir    │  🎤  ⚙  ×    │  └──────────────┴───────┴─────────┘
+└──────────────────────────┘                    └──────────────┘
+         (padrão: bottom-right)                  (expansão lateral direita)
 ```
 
 ### 4.2 Estados e transições
@@ -145,7 +146,7 @@ src/
           AgentsTab.tsx              ← ativar/desativar agentes individualmente
           KnowledgeTab.tsx           ← upload PDF/TXT/MD → base de conhecimento
           VoicesTab.tsx              ← perfis de voz (move de SettingsPanel atual)
-    cockpit/                         ← mantém como layout Iron Man (archive/POC)
+    cockpit/                         ← layout Iron Man (versão anterior — legado; sem novas features)
       [... sem alterações ...]
 
   lib/
@@ -377,7 +378,7 @@ maya:
 | Python no container | Alpine + venv | Menor imagem; vosk funciona em Alpine |
 | Boot sequence | Removida do widget | Impacta UX em embed; widget deve aparecer instantaneamente |
 | Autenticação do widget | Delegada ao host | Widget não tem senha própria; confia no sistema host |
-| Layout Iron Man | Preservado em `/cockpit` | POC de features; referência visual |
+| Layout Iron Man | Preservado em `/cockpit` | Versão anterior do produto — mantida como legado sem novas features |
 
 ---
 
@@ -395,7 +396,7 @@ maya:
 
 ## 11. Referências
 
-- Código atual: `src/components/cockpit/` (Iron Man POC)
+- Código atual: `src/components/cockpit/` (layout Iron Man — versão anterior do produto)
 - PontoCore layout: `seneca-client/src/app/layout/layouts/vertical/classic/`
 - quick-chat existente (desabilitado): `seneca-client/src/app/layout/common/quick-chat/`
 - Speaker ID: `src/scripts/vosk_speaker.py`, `src/lib/voskSpeaker.ts`

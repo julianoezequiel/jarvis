@@ -28,7 +28,7 @@
 | 1 | Posição padrão do widget: **direita** (`bottom-right`) | 12/03/2026 |
 | 2 | Largura da sidebar: **380px** | 12/03/2026 |
 | 3 | Método de embed: **script tag** (PontoCore) + **iframe** (terceiros) | 12/03/2026 |
-| 4 | Layout Iron Man (`/cockpit`) preservado como POC — sem alterações | 12/03/2026 |
+| 4 | Layout Iron Man (`/cockpit`) mantido como versão anterior (legado) — sem novas features | 12/03/2026 |
 | 5 | `DB_ADAPTER=supabase` padrão; `DB_ADAPTER=postgres` para Docker/PontoCore | 12/03/2026 |
 | 6 | Widget em **overlay fixed** — não altera layout do host | 12/03/2026 |
 | 7 | Boot sequence removida do widget (aparece instantaneamente) | 12/03/2026 |
@@ -65,6 +65,27 @@
 - ✅ CRITERIOS_ACEITE.md criada
 - ✅ ANDAMENTO.md criada
 - ⏳ Branch `feature/jarvis-TASK-002` a criar na próxima sessão de implementação
+
+---
+
+## Padrões de Desenvolvimento (Projeto Oficial)
+
+Este projeto segue metodologias de desenvolvimento profissional. Toda implementação **deve** atender os seguintes critérios:
+
+| Prática | Obrigatório |
+|---|---|
+| **TypeScript strict** — `noImplicitAny`, `strictNullChecks`, sem `any` | ✅ |
+| **`npx tsc --noEmit` sem erros** antes de qualquer commit | ✅ |
+| **Commits atômicos** com mensagem no padrão `tipo: descrição (Refs: TASK-XXX)` | ✅ |
+| **Testes funcionais** para cada feature antes de mergear | ✅ |
+| **Tratamento de erros explícito** — sem `catch` silencioso ou `any` implícito | ✅ |
+| **Segurança**: validar todas as entradas de API, nunca expor chaves no frontend | ✅ |
+| **Responsividade**: mobile-first para o widget (≥ 320px) | ✅ |
+| **Acessibilidade**: atributos ARIA nas interações do widget | ✅ |
+| **Performance**: sem re-renders desnecessários — `useMemo`/`useCallback` onde aplicável | ✅ |
+| **CSS isolation**: widget não pode vazar estilos para o host nem receber do host | ✅ |
+| **Sem hacks/workarounds** — se a solução parece gambiarra, parar e redesenhar | ✅ |
+| **Documentar decisões** técnicas neste ANDAMENTO.md | ✅ |
 
 ---
 
