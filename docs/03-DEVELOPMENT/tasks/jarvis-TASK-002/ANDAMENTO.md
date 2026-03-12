@@ -3,7 +3,7 @@
 **Task:** JARVIS-TASK-002  
 **Branch:** `feature/jarvis-TASK-002`  
 **Início:** 12/03/2026  
-**Última atualização:** 12/03/2026 (sessão 4)  
+**Última atualização:** 13/03/2026 (sessão 6)  
 
 ---
 
@@ -15,8 +15,8 @@
 | 2 | Widget Core (Orb + Sidebar + Maximizado) | ✅ Concluído |
 | 3 | SettingsModal com 4 abas | ✅ Concluído |
 | 4 | Enrollment Externo via evento | ✅ Concluído |
-| 5 | Embed Script (script tag + iframe) | ⏳ Não iniciado |
-| 6 | Integração PontoCore Frontend | ⏳ Não iniciado |
+| 5 | Embed Script (script tag + iframe) | ✅ Concluído |
+| 6 | Integração PontoCore Frontend | ✅ Concluído |
 | 7 | Dockerfile e Containerização | ⏳ Não iniciado |
 
 ---
@@ -192,6 +192,96 @@ Este projeto segue metodologias de desenvolvimento profissional. Toda implementa
 
 ---
 
+### 12/03/2026 — Sessão 5: Fase 5 concluída
+
+#### Fase 5 — Embed Script
+
+- ✅ `embed/script.ts` — TypeScript source do loader de embed
+  - Localiza a própria `<script>` tag via `document.querySelector('[data-token]')` ou src
+  - Lê `data-token`, `data-position`, `data-theme` como configuração
+  - Cria `<iframe id="maya-widget-iframe">` apontando para `{baseUrl}/embed?...`
+  - Tamanho dinâmico: `120×120px` (orb fechado) → `420×100vh` (sidebar aberta)
+  - Escuta `message` events do iframe e redimensiona conforme `widget:open-change`
+  - Expõe `window.__maya` — não polui nenhuma outra propriedade
+- ✅ `public/maya-widget.js` — compilado vanilla JS (IIFE), pronto para `<script src=...>`
+  - Mesmo comportamento do `embed/script.ts`, sem dependências externas
+- ✅ `src/app/embed/layout.tsx` — layout mínimo para a rota iframe
+  - `background: transparent`, `pointerEvents: none` no body (áreas transparentes não interceptam cliques do host)
+- ✅ `src/app/embed/page.tsx` — rota `/embed` renderizada dentro do iframe
+  - Lê `?position=...&theme=...` via `useSearchParams`
+  - Renderiza `<MayaWidget>` com config derivada dos params
+  - Bridge postMessage ↔ CustomEvent (bidirecional):
+    - `maya:enroll-voice` postMessage do host → CustomEvent interno
+    - `maya:open` postMessage do host → CustomEvent interno
+    - `maya:enroll-complete` CustomEvent interno → postMessage para `window.parent`
+    - `onOpenChange` callback → `widget:open-change` postMessage para o host (para resize do iframe)
+- ✅ `src/components/widget/MayaWidget.tsx` — prop `onOpenChange?: (isOpen: boolean) => void` adicionada
+- ✅ `src/app/embed/__tests__/embed.page.test.tsx` — 8 testes
+  - EmbedPage renderiza sem crash
+  - Container raiz tem `pointerEvents: none` e `background: transparent`
+  - postMessage `maya:enroll-voice` → CustomEvent com `name` e `userId`
+  - postMessage `maya:open` → CustomEvent `maya:open`
+  - Tipos desconhecidos ignorados silenciosamente
+  - Mensagens sem `type` ignoradas
+  - `maya:enroll-complete` CustomEvent → postMessage para parent com todos campos
+  - Click no orb → `widget:open-change { isOpen: true }` postado ao parent
+- ✅ **108/108 testes passando** (`npx vitest run`)
+- ✅ `npx tsc --noEmit` — zero erros
+- ✅ Commit `cbbe5ab`: `feat: Fase 5 - Embed Script (iframe loader + /embed route + window.__maya API) (Refs: TASK-002)`
+
+#### API pública exposta (`window.__maya`)
+
+```js
+window.__maya.enrollVoice(name, userId?)  // dispara fluxo de enrollment no widget
+window.__maya.open()                       // abre o widget
+window.__maya.on('enroll-complete', fn)    // ouve resultado do enrollment
+window.__maya.on('open-change', fn)        // ouve abertura/fechamento
+window.__maya.off(event, fn)              // cancela listener
+```
+
+---
+
+---
+
+### 13/03/2026 — Sessão 6: Fase 6 concluída
+
+#### Fase 6 — Integração PontoCore Frontend
+
+- ✅ `seneca-client/src/index.html` — `<script>` tag Maya injetada antes de `</body>`
+  - `src="http://localhost:3000/maya-widget.js"`
+  - `data-position="right"` + `data-theme="#00d4ff"`
+  - Widget emerge em overlay `fixed` → sem conflito com layouts Fuse (classic, classy, compact, dense)
+  - Script `type="module"` removido — IIFE é carregado como script normal, compatível com todos os browsers
+- ✅ `employee-list.component.html` — botão "Cadastrar Voz Maya" adicionado na coluna `acoes`
+  - `mat-icon-button` com `matTooltip="Cadastrar Voz Maya"` + ícone `mic` (Material Icons)
+  - `(click)="cadastrarVozMaya(func)"` — chama método do TS sem `$event` (não precisa de stopPropagation aqui)
+- ✅ `employee-list.component.ts` — método `cadastrarVozMaya()` adicionado
+  - Acessa `(window as any).__maya` com guard-check antes de chamar
+  - Passa `employee.nome` e `String(employee.idFuncionario)` → `window.__maya.enrollVoice(name, userId)`
+  - Compatível: funciona mesmo se Maya não estiver carregada (sem erro se `__maya` for undefined)
+- ✅ `docker-compose.fullstack.onpremise.yml` — serviço `maya-widget` adicionado
+  - `image: node:20-alpine`, `working_dir: /app`
+  - `volumes: - ../jarvis:/app:cached` (relativo ao arquivo em `pontocore-backend/`)
+  - `command: sh -c "npm ci --silent && npm run build && npm start"`
+  - `env_file: ../jarvis/.env.onpremise` — vars de API do Jarvis
+  - `ports: 3000:3000`, `depends_on: frontend-app`
+  - Rede: `pontocore-onpremise` (mesma dos outros serviços)
+- ✅ `application-onpremise.properties` — CORS atualizado
+  - `app.cors.allowed-origins=${APP_CORS_ALLOWED_ORIGINS:http://localhost:4200,http://localhost:3000}`
+  - Maya widget iframe comunica via postMessage (não CORS), mas Maya pode fazer requisições diretas ao backend no futuro
+
+#### Arquivos modificados em outros projetos
+
+| Arquivo | Projeto | Alteração |
+|---|---|---|
+| `seneca-client/src/index.html` | pontocore-frontend | +7 linhas: script tag Maya |
+| `registration/employee/employee-list/employee-list.component.html` | pontocore-frontend | +4 linhas: botão Cadastrar Voz |
+| `registration/employee/employee-list/employee-list.component.ts` | pontocore-frontend | +7 linhas: método cadastrarVozMaya() |
+| `docker-compose.fullstack.onpremise.yml` | pontocore-backend | +18 linhas: serviço maya-widget |
+| `b-inn-module-core/src/main/resources/application-onpremise.properties` | pontocore-backend | +1 linha: CORS |
+
+---
+
 ## Próximo Passo
 
-**Fase 5 — Embed Script (script tag + iframe)**
+**Fase 7 — Dockerfile e Containerização**
