@@ -276,65 +276,95 @@ export async function POST(req: Request) {
       }
     } catch (_) { /* ignore */ }
 
-    // 1. Gemini (gratuito, aistudio.google.com)
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY
-    if (GEMINI_API_KEY) {
+    // 1. Gemini — tenta primeiro a key gratuita, cai para a paga se cota esgotada (HTTP 429 / RESOURCE_EXHAUSTED)
+    const GEMINI_FREE_KEY = process.env.GEMINI_API_KEY_FREE
+    const GEMINI_PAID_KEY = process.env.GEMINI_API_KEY  // chave paga (fallback)
+
+    // Helper: monta contents para Gemini (fora do try para reutilizar)
+    const buildGeminiContents = () => {
+      const contents: any[] = []
+      const dedupedRecent = recentMessages.filter((m: any, i: number) => {
+        if (m.role === 'user' && i === recentMessages.length - 1 && String(m.text || '').trim() === String(userMessage || '').trim()) return false
+        return true
+      })
+      for (const m of dedupedRecent) {
+        const role = m.role === 'assistant' ? 'model' : 'user'
+        const last = contents[contents.length - 1]
+        if (last && last.role === role) {
+          last.parts[0].text += '\n' + String(m.text)
+        } else {
+          contents.push({ role, parts: [{ text: String(m.text) }] })
+        }
+      }
+      const lastTurn = contents[contents.length - 1]
+      const userParts: any[] = []
+      if (imageBase64) userParts.push({ inlineData: { mimeType: imageMime, data: imageBase64 } })
+      userParts.push({ text: userMessage })
+      if (lastTurn && lastTurn.role === 'user') {
+        lastTurn.parts.push(...userParts)
+      } else {
+        contents.push({ role: 'user', parts: userParts })
+      }
+      return contents
+    }
+
+    const callGemini = async (apiKey: string): Promise<{ text?: string; quotaExceeded?: boolean }> => {
       try {
         const model = 'gemini-2.5-flash'
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`
-        const contents: any[] = []
-        // Gemini só aceita role 'user' e 'model' em contents — nunca 'system'
-        // Remover a última mensagem user se for igual à userMessage atual (evita duplicata)
-        const dedupedRecent = recentMessages.filter((m: any, i: number) => {
-          if (m.role === 'user' && i === recentMessages.length - 1 && String(m.text || '').trim() === String(userMessage || '').trim()) return false
-          return true
-        })
-        // Garantir alternância user/model — mesclar mensagens consecutivas do mesmo papel
-        for (const m of dedupedRecent) {
-          const role = m.role === 'assistant' ? 'model' : 'user'
-          const last = contents[contents.length - 1]
-          if (last && last.role === role) {
-            // Mesclar com a anterior para evitar turnos consecutivos do mesmo papel
-            last.parts[0].text += '\n' + String(m.text)
-          } else {
-            contents.push({ role, parts: [{ text: String(m.text) }] })
-          }
-        }
-        // Garantir que o último turn antes da mensagem atual seja 'model' ou vazio
-        const lastTurn = contents[contents.length - 1]
-        // Montar partes da mensagem do usuário (texto + imagem opcional)
-        const userParts: any[] = []
-        if (imageBase64) userParts.push({ inlineData: { mimeType: imageMime, data: imageBase64 } })
-        userParts.push({ text: userMessage })
-        if (lastTurn && lastTurn.role === 'user') {
-          // Mesclar com a anterior
-          lastTurn.parts.push(...userParts)
-        } else {
-          contents.push({ role: 'user', parts: userParts })
-        }
-
-        // memorySummary vai dentro do system_instruction, não em contents
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
         const systemText = memorySummary ? `${SYSTEM_PROMPT}\n\n${memorySummary}` : SYSTEM_PROMPT
-
         const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             system_instruction: { parts: [{ text: systemText }] },
-            contents,
+            contents: buildGeminiContents(),
           }),
         })
         const j = await res.json().catch(() => null)
+        // Detecta cota esgotada: HTTP 429 ou status RESOURCE_EXHAUSTED
+        const isQuota = res.status === 429 || j?.error?.status === 'RESOURCE_EXHAUSTED'
+        if (isQuota) {
+          console.warn(`[maya-chat] Gemini quota exceeded for key ...${apiKey.slice(-6)}`)
+          return { quotaExceeded: true }
+        }
         const text: string | undefined = j?.candidates?.[0]?.content?.parts?.[0]?.text
+        if (text) return { text }
+        console.error(`[maya-chat] Gemini missing text (HTTP ${res.status}):`, JSON.stringify(j)?.slice(0, 300))
+        return {}
+      } catch (e) {
+        console.error('[maya-chat] Gemini call failed:', e)
+        return {}
+      }
+    }
+
+    if (GEMINI_FREE_KEY || GEMINI_PAID_KEY) {
+      // Tenta key gratuita primeiro
+      if (GEMINI_FREE_KEY) {
+        const { text, quotaExceeded } = await callGemini(GEMINI_FREE_KEY)
         if (text) {
           return new Response(JSON.stringify({ text, provider: 'gemini' }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
+            status: 200, headers: { 'Content-Type': 'application/json' },
           })
         }
-        console.error(`Gemini response missing text (HTTP ${res.status}):`, JSON.stringify(j)?.slice(0, 300))
-      } catch (e) {
-        console.error('Gemini call failed', e)
+        // Só tenta paga se foi realmente quota esgotada — outros erros passam para o próximo LLM
+        if (quotaExceeded && GEMINI_PAID_KEY) {
+          console.warn('[maya-chat] Free Gemini quota exhausted — switching to paid key')
+          const { text: paidText } = await callGemini(GEMINI_PAID_KEY)
+          if (paidText) {
+            return new Response(JSON.stringify({ text: paidText, provider: 'gemini-paid' }), {
+              status: 200, headers: { 'Content-Type': 'application/json' },
+            })
+          }
+        }
+      } else if (GEMINI_PAID_KEY) {
+        // Sem key gratuita: usa paga diretamente (comportamento legado)
+        const { text } = await callGemini(GEMINI_PAID_KEY)
+        if (text) {
+          return new Response(JSON.stringify({ text, provider: 'gemini-paid' }), {
+            status: 200, headers: { 'Content-Type': 'application/json' },
+          })
+        }
       }
     }
 

@@ -556,6 +556,10 @@ export function useMayaChat() {
         try { window.dispatchEvent(new CustomEvent('maya:assistant-message', { detail: { text: assistantText } })) } catch (_) {}
         // Stay in 'thinking' until audio actually starts playing
         setStatus('thinking')
+        // Avisa a interface quando a chave paga Gemini está sendo usada
+        if (json.provider === 'gemini-paid') {
+          try { window.dispatchEvent(new CustomEvent('maya:paid-key-used')) } catch (_) {}
+        }
         await speakText(stripMarkdownForTTS(cleanText), () => setStatus(`speaking (${json.provider ?? 'ai'})`))
         setStatus('done')
         sendingRef.current = false

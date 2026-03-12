@@ -28,6 +28,14 @@ export default function ChatPanel({ alwaysOpen = false }: { alwaysOpen?: boolean
   const [imageBase64, setImageBase64] = useState<string | null>(null)
   const [imageMime, setImageMime] = useState<string>('image/png')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [paidKeyActive, setPaidKeyActive] = useState(false)
+
+  // Escuta o evento de chave paga ativa
+  useEffect(() => {
+    const handler = () => setPaidKeyActive(true)
+    window.addEventListener('maya:paid-key-used', handler)
+    return () => window.removeEventListener('maya:paid-key-used', handler)
+  }, [])
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const attachImage = useCallback((file: File) => {
@@ -168,6 +176,21 @@ export default function ChatPanel({ alwaysOpen = false }: { alwaysOpen?: boolean
               )}
             </div>
           </div>
+
+          {/* ⚠️ Banner: chave paga ativa */}
+          {paidKeyActive && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: 'rgba(239,68,68,0.12)',
+              border: '1px solid rgba(239,68,68,0.5)',
+              borderRadius: 6, padding: '5px 10px',
+              fontSize: 10, color: '#f87171',
+              fontFamily: 'Share Tech Mono, monospace',
+              letterSpacing: 0.5,
+            }}>
+              ⚠ ATENÇÃO: créditos gratuitos Gemini esgotados — usando chave PAGA
+            </div>
+          )}
 
           {/* Messages */}
           <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '340px', minHeight: 0, paddingRight: '4px' }}>
